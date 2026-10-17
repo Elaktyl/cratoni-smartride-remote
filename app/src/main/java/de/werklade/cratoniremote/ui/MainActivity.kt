@@ -120,6 +120,9 @@ private fun RemoteRoute(modifier: Modifier = Modifier) {
     // Bumped after every action that can change association or permission state; both are read from the
     // system, not cached.
     var refreshKey by remember { mutableIntStateOf(0) }
+    // Which app answers the walkie-talkie button, re-read on every refresh — the ON_RESUME bump below is what
+    // brings a choice made in the system settings back here.
+    val assistant = rememberAssistantTarget(refreshKey)
     val remoteConfigured = remember(refreshKey, setup) { setup.isAssociated() }
     val missingPermissions = remember(refreshKey, context) { missingPermissions(context) }
     // Whether the last association request was refused by the system; a cancelled dialog is not a failure.
@@ -385,6 +388,7 @@ private fun RemoteRoute(modifier: Modifier = Modifier) {
         showBatteryOptimizationHint = IS_SAMSUNG_DEVICE && remoteConfigured,
         // Only relevant while setting up: CompanionDeviceManager.associate() requires the location switch on.
         showLocationHint = !remoteConfigured && !locationEnabled,
+        assistantTarget = assistant?.target,
         onRequestPermissions = { permissionLauncher.launch(missingPermissions.toTypedArray()) },
         onSetUp = {
             setupFailed = false
@@ -435,6 +439,10 @@ private fun RemoteRoute(modifier: Modifier = Modifier) {
                 refreshKey++
             }
         },
+        // Opens the system page for the assistant choice; the screen only needs to know whether there was one.
+        // The package comes from the same resolution as the shown name, so the app info page belongs to the app
+        // the line names. Nothing is refreshed here: coming back from the settings is an ON_RESUME.
+        onOpenAssistantSettings = { openAssistantSettings(context, assistant?.packageName) },
         modifier = modifier,
         setupFailed = setupFailed,
         confirmationRemainingSeconds = state.pendingConfirmation?.remainingSeconds(nowElapsedMs) ?: 0,
@@ -493,6 +501,32 @@ private fun rememberLocationEnabled(): Boolean {
         onDispose { context.unregisterReceiver(receiver) }
     }
     return enabled
+}
+
+/**
+ * Which app the system hands the walkie-talkie button over to, re-asked whenever [refreshKey] changes; `null`
+ * until the first answer is there, which the screen shows as "Wird ermittelt …".
+ *
+ * On [Dispatchers.IO]: [resolveAssistantTarget] queries the package manager twice and loads an app label, all of
+ * which reads from the system and none of which belongs on the main thread. No broadcast to listen to — the
+ * choice can only change in the system settings or in the chooser, and both are a detour out of this screen, so
+ * the existing `ON_RESUME` bump of [refreshKey] is exactly the right trigger.
+ *
+ * The previous answer stays visible while a [refreshKey] bump fetches a new one: a line that blinks back to
+ * "Wird ermittelt …" on every return to the screen would say less, not more. That holds for a refresh only —
+ * a configuration change such as a rotation recreates the activity and therefore starts at `null` again, which
+ * is deliberate: the answer is back within milliseconds, so it is not worth saving.
+ */
+@Composable
+private fun rememberAssistantTarget(refreshKey: Int): AssistantResolution? {
+    val context = LocalContext.current
+    var resolution by remember(context) { mutableStateOf<AssistantResolution?>(null) }
+
+    LaunchedEffect(refreshKey, context) {
+        val found = withContext(Dispatchers.IO) { resolveAssistantTarget(context.packageManager) }
+        resolution = found
+    }
+    return resolution
 }
 
 /**

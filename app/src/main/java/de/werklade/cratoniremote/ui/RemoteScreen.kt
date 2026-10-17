@@ -18,6 +18,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -89,8 +91,12 @@ import de.werklade.cratoniremote.protocol.RemoteCommand
  * @param showBatteryOptimizationHint whether to show the Samsung "never sleep" hint (caller decides relevance,
  *   e.g. manufacturer and whether a remote is set up)
  * @param showLocationHint whether to show the "location switch must be on to set up" hint
+ * @param assistantTarget which app the walkie-talkie button hands over to, `null` while the caller is still
+ *   asking the system (the question needs package manager work, which must not happen on the main thread)
  * @param onCancelConfirmation called when the user cancels the waiting for the confirmation press; the caller
  *   takes the association back
+ * @param onOpenAssistantSettings called for the button next to [assistantTarget]; returns `false` if no system
+ *   page for the choice could be opened, which is the only case in which this screen says anything about it
  * @param confirmationRemainingSeconds whole seconds left of
  *   [de.werklade.cratoniremote.data.RemoteState.pendingConfirmation], counted by the caller (the countdown
  *   runs on `SystemClock.elapsedRealtime`, which this screen deliberately does not read itself)
@@ -105,10 +111,12 @@ fun RemoteScreen(
     callPermissionMissing: Boolean,
     showBatteryOptimizationHint: Boolean,
     showLocationHint: Boolean,
+    assistantTarget: AssistantTarget?,
     onRequestPermissions: () -> Unit,
     onSetUp: () -> Unit,
     onForget: () -> Unit,
     onCancelConfirmation: () -> Unit,
+    onOpenAssistantSettings: () -> Boolean,
     modifier: Modifier = Modifier,
     // After the modifier, as the Compose API guidelines require of the first optional parameter.
     setupFailed: Boolean = false,
@@ -137,7 +145,13 @@ fun RemoteScreen(
             )
         }
 
-        StatusOverviewCard(bluetoothEnabled = bluetoothEnabled, remoteConfigured = remoteConfigured, state = remoteState)
+        StatusOverviewCard(
+            bluetoothEnabled = bluetoothEnabled,
+            remoteConfigured = remoteConfigured,
+            state = remoteState,
+            assistantTarget = assistantTarget,
+            onOpenAssistantSettings = onOpenAssistantSettings,
+        )
 
         if (missingPermissionNames.isNotEmpty()) {
             val names = missingPermissionNames.map { permissionLabel(it) }.joinToString(", ")
@@ -356,12 +370,14 @@ private fun ConfirmationOutcomeText(outcome: ConfirmationOutcome?, modifier: Mod
     )
 }
 
-/** The six status lines in one card; its container colour marks the two states worth noticing at a glance. */
+/** The seven status lines in one card; its container colour marks the two states worth noticing at a glance. */
 @Composable
 private fun StatusOverviewCard(
     bluetoothEnabled: Boolean,
     remoteConfigured: Boolean,
     state: RemoteState,
+    assistantTarget: AssistantTarget?,
+    onOpenAssistantSettings: () -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val containerColor = statusContainerColor(remoteConfigured, state)
@@ -385,6 +401,7 @@ private fun StatusOverviewCard(
             BatteryRow(state.battery)
             StatusRow(label = stringResource(R.string.label_helmet), value = helmetStatusText(state.helmet))
             StatusRow(label = stringResource(R.string.label_lights), value = lightsText(state.lights))
+            AssistantRow(target = assistantTarget, onOpenSettings = onOpenAssistantSettings)
             LastCommandRow(state.lastCommand)
         }
     }
@@ -436,6 +453,64 @@ private fun BatteryRow(battery: RemoteBattery?, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Which app the walkie-talkie button hands over to, plus the way into the system page where that is decided.
+ *
+ * Right above "Letzter Befehl" on purpose: that line often reads "Sprachassistent" and this one explains what
+ * happened then — or why nothing did. The app's name is not a status of this app, so the row stays neutral in
+ * every case; `null` means the caller is still asking the system.
+ *
+ * The button is always there: without a default app it is the way to set one, with one it is the way to change
+ * it. Only when none of the system pages exists on this device does a quiet caption say so — a dialog or a
+ * toast for a settings shortcut would be out of proportion. That state lives here because it is nothing but the
+ * result of the last tap.
+ */
+@Composable
+private fun AssistantRow(
+    target: AssistantTarget?,
+    onOpenSettings: () -> Boolean,
+    modifier: Modifier = Modifier,
+) {
+    var settingsMissing by remember { mutableStateOf(false) }
+    // The visible button text is short on purpose; out of context, between seven status lines, "Einstellungen
+    // öffnen" says nothing about which settings, so a screen reader gets the long version.
+    val openSettingsDescription = stringResource(R.string.action_assistant_settings_description)
+    val value = when (target) {
+        null -> stringResource(R.string.assistant_pending)
+        AssistantTarget.None -> stringResource(R.string.assistant_none)
+        AssistantTarget.AskedOnPress -> stringResource(R.string.assistant_asked_on_press)
+        is AssistantTarget.App -> target.label
+    }
+    // The card's content colour, so the outlined button carries the container role of the card instead of the
+    // theme's primary, which does not hold against primaryContainer or errorContainer.
+    val contentColor = LocalContentColor.current
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatusRow(
+            label = stringResource(R.string.label_assistant),
+            value = value,
+            caption = if (settingsMissing) stringResource(R.string.assistant_settings_missing) else null,
+            // A live region because of the caption: it is the answer to the tap right below it and would
+            // otherwise go unnoticed. The value itself changes once, when the first answer replaces
+            // "Wird ermittelt …", which is worth hearing too.
+            announceChanges = true,
+            // The name comes from another app; assistantLabel already shortens it, this keeps even a tidied
+            // long name from pushing the card apart.
+            valueMaxLines = 2,
+        )
+        OutlinedButton(
+            onClick = { settingsMissing = !onOpenSettings() },
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = openSettingsDescription },
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor),
+            border = BorderStroke(1.dp, contentColor),
+        ) {
+            Text(text = stringResource(R.string.action_assistant_settings))
+        }
+    }
+}
+
+/**
  * The last command survives the service being stopped, so it can be hours old. From half a day on
  * ([RemoteStatusText.showsDate]) the timestamp carries the date, otherwise a command from yesterday evening
  * reads like one from a few minutes ago.
@@ -475,6 +550,8 @@ private fun LastCommandRow(last: LastCommand?, modifier: Modifier = Modifier) {
  * One label/value pair. [announceChanges] marks it as a live region so screen readers notice updates without
  * the user having to move focus there; only the remote's status line uses it.
  *
+ * @param valueMaxLines how many lines the value may take; unlimited by default, because every value this app
+ *   produces itself is short. Only the assistant row limits it — its value is another app's name.
  * @param leading optional symbol in front of the value, aligned with it; only the battery row uses it. The row is
  *   a merged semantics node, so a decorative symbol adds nothing to what a screen reader reads out.
  */
@@ -485,6 +562,7 @@ private fun StatusRow(
     modifier: Modifier = Modifier,
     caption: String? = null,
     announceChanges: Boolean = false,
+    valueMaxLines: Int = Int.MAX_VALUE,
     leading: @Composable (() -> Unit)? = null,
 ) {
     Column(
@@ -494,20 +572,31 @@ private fun StatusRow(
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium)
         if (leading == null) {
-            Text(text = value, style = MaterialTheme.typography.titleMedium)
+            ValueText(value = value, maxLines = valueMaxLines)
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 leading()
-                Text(text = value, style = MaterialTheme.typography.titleMedium)
+                ValueText(value = value, maxLines = valueMaxLines)
             }
         }
         if (caption != null) {
             Text(text = caption, style = MaterialTheme.typography.bodySmall)
         }
     }
+}
+
+/** The value of a [StatusRow]; cut with an ellipsis once [maxLines] is reached instead of growing the card. */
+@Composable
+private fun ValueText(value: String, maxLines: Int) {
+    Text(
+        text = value,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -702,8 +791,17 @@ private val PREVIEW_CONFIRMING = RemoteState(
 // After the timeout the association is gone again: not set up, with the reason below the button.
 private val PREVIEW_CONFIRMATION_TIMED_OUT = RemoteState(lastConfirmation = ConfirmationOutcome.TIMED_OUT)
 
+// The app name for the assistant row in the previews below; the other three answers the system can give have
+// previews of their own at the end of this file.
+private val PREVIEW_ASSISTANT_APP = AssistantTarget.App("Google")
+
 @Composable
-private fun PreviewScreen(remoteConfigured: Boolean, state: RemoteState, confirmationRemainingSeconds: Int = 0) {
+private fun PreviewScreen(
+    remoteConfigured: Boolean,
+    state: RemoteState,
+    confirmationRemainingSeconds: Int = 0,
+    assistantTarget: AssistantTarget? = PREVIEW_ASSISTANT_APP,
+) {
     val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
     MaterialTheme(colorScheme = colorScheme) {
         RemoteScreen(
@@ -715,10 +813,12 @@ private fun PreviewScreen(remoteConfigured: Boolean, state: RemoteState, confirm
             callPermissionMissing = false,
             showBatteryOptimizationHint = false,
             showLocationHint = false,
+            assistantTarget = assistantTarget,
             onRequestPermissions = {},
             onSetUp = {},
             onForget = {},
             onCancelConfirmation = {},
+            onOpenAssistantSettings = { true },
             confirmationRemainingSeconds = confirmationRemainingSeconds,
         )
     }
@@ -785,3 +885,35 @@ private fun PreviewConfirmationTimedOutLight() =
 @Composable
 private fun PreviewConfirmationTimedOutDark() =
     PreviewScreen(remoteConfigured = false, state = PREVIEW_CONFIRMATION_TIMED_OUT)
+
+// The other three states of the assistant row; the app name is in every preview above, "Verbunden" included.
+
+@Preview(name = "Assistent nicht festgelegt – hell", showBackground = true)
+@Composable
+private fun PreviewAssistantNoneLight() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = AssistantTarget.None)
+
+@Preview(name = "Assistent nicht festgelegt – dunkel", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewAssistantNoneDark() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = AssistantTarget.None)
+
+@Preview(name = "Assistent wird abgefragt – hell", showBackground = true)
+@Composable
+private fun PreviewAssistantAskedLight() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = AssistantTarget.AskedOnPress)
+
+@Preview(name = "Assistent wird abgefragt – dunkel", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewAssistantAskedDark() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = AssistantTarget.AskedOnPress)
+
+@Preview(name = "Assistent wird ermittelt – hell", showBackground = true)
+@Composable
+private fun PreviewAssistantPendingLight() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = null)
+
+@Preview(name = "Assistent wird ermittelt – dunkel", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewAssistantPendingDark() =
+    PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = null)

@@ -19,6 +19,10 @@
     <string name="label_battery">Akkustand</string>
     <string name="label_helmet">Helm</string>
     <string name="label_lights">Licht</string>
+    <!-- Which app the system hands the walkie-talkie button over to. Deliberately not the wording of
+         command_walkie_talkie ("Sprachassistent"): the line sits directly above "Letzter Befehl", where that
+         would read as "Sprachassistent" twice in a row. -->
+    <string name="label_assistant">Zuständiger Assistent</string>
     <string name="label_last_command">Letzter Befehl</string>
 
     <string name="bluetooth_on">Aktiv</string>
@@ -83,6 +87,18 @@
     <!-- Used instead of battery_measured_at once the measurement time carries a date (RemoteStatusText.showsDate):
          a connection can stand across midnight and the poll stands still in deep sleep. -->
     <string name="battery_measured_at_date">gemessen am %1$s</string>
+
+    <!-- Assistant in charge of the walkie-talkie button. The value is normally the app's name as the system
+         reports it; these three cover the cases in which there is no name to show. -->
+    <string name="assistant_none">Nicht festgelegt</string>
+    <string name="assistant_asked_on_press">Wird beim Drücken abgefragt</string>
+    <string name="assistant_pending">Wird ermittelt …</string>
+    <string name="action_assistant_settings">Einstellungen öffnen</string>
+    <!-- Spoken instead of action_assistant_settings: the short visible text stands between seven status lines
+         and says nothing about which settings it opens. -->
+    <string name="action_assistant_settings_description">Assistent-Einstellungen öffnen</string>
+    <!-- Shown only if none of the system pages tried could be opened (see ui/AssistantTarget.kt). -->
+    <string name="assistant_settings_missing">Diese Systemseite gibt es auf diesem Gerät nicht.</string>
 
     <!-- Last command -->
     <string name="last_command_none">Noch kein Befehl empfangen</string>

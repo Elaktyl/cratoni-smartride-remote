@@ -37,6 +37,18 @@
              started through the companion presence exemption above; no evidence it is needed.
          ACCESS_FINE_LOCATION, WAKE_LOCK, RECEIVE_BOOT_COMPLETED, notification listener permissions. -->
 
+    <!-- Package visibility for the status card line "Zuständiger Assistent": only with this entry do
+         PackageManager.queryIntentActivities and resolveActivity answer for the hands-free voice search from
+         Android 11 on — without it resolveActivity returns null and the card could never name the app that the
+         walkie-talkie button hands over to (see ui/AssistantTarget.kt).
+         Deliberately not QUERY_ALL_PACKAGES: this app needs to see exactly one action, not every installed app,
+         and that permission is restricted on Google Play anyway. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.VOICE_SEARCH_HANDS_FREE" />
+        </intent>
+    </queries>
+
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />

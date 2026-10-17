@@ -1,7 +1,7 @@
 # Architektur — CRATONI SMARTRIDE 1.2 Remote → Android-Mediensteuerung (V1)
 
 Stand: 17.10.2026
-Status: Architekturentscheidung für V1, vom Projektinhaber am 11.09.2026 bestätigt; fortgeschrieben bis zur Remote-Auswahl aus einer Liste mit Tastenbestätigung (17.10.2026).
+Status: Architekturentscheidung für V1, vom Projektinhaber am 11.09.2026 bestätigt; fortgeschrieben bis zur Anzeige des zuständigen Sprachassistenten in der Statuskarte (A1, 17.10.2026); davor Remote-Auswahl aus einer Liste mit Tastenbestätigung (17.10.2026).
 
 Fachliche Anforderungen: Das zugrunde liegende Anforderungsdokument (`docs/anforderungen.md`) ist privat und nicht Teil dieser Veröffentlichung; Verweise darauf im weiteren Text und in einzelnen Quelldateien laufen daher ins Leere. Dieses Dokument wiederholt die Anforderungen nicht, sondern hält die daraus abgeleiteten Architekturentscheidungen fest.
 
@@ -25,6 +25,7 @@ Fachliche Anforderungen: Das zugrunde liegende Anforderungsdokument (`docs/anfor
 | Akkuwarnung (26.09.2026) | Warnung bei 20 %, erneut bei 10 % und 0 %, jede Schwelle nur einmal; wieder scharf, sobald der Wert 10 Punkte darüber liegt. Eigener Benachrichtigungskanal „Akkuwarnung" mit Ton, getrennt von der stillen Statusanzeige. Zuletzt gewarnte Stufe in `SharedPreferences`, damit ein Dienstneustart nicht erneut warnt. | Warnung im Arbeitsspeicher — der Dienst startet im Alltag häufig neu und hätte bei jeder Verbindung erneut gewarnt. |
 | Walkie-Talkie-Taste (umgesetzt und am Gerät geprüft am 16.10.2026) | Startet den Sprachassistenten. `AssistantExecutor` / `MediaKeyAssistantExecutor` senden über `AudioManager.dispatchMediaKeyEvent` eine Langdruck-Folge der Headset-Taste (`KEYCODE_HEADSETHOOK`); `MediaSessionService` startet daraufhin `ACTION_VOICE_SEARCH_HANDS_FREE`. Keine neue Berechtigung, kein WakeLock. Gesendet wird nur im Audio-Modus `MODE_NORMAL`; bei Klingeln (`MODE_RINGTONE`), im Telefonat (`MODE_IN_CALL`) und bei `MODE_IN_COMMUNICATION` (auch Intercom-/VoIP-Apps wie Discord, Wave Intercom) tut die Taste nichts (Ergebnis `Ignored`). Doppeldruck-Schutz nur für die Dauer der Folge (rund 0,5 s). Details und Messungen: §12, §11. | (a) `startActivity(ACTION_VOICE_COMMAND / ACTION_ASSIST)` aus dem Dienst — scheitert an der Startsperre aus dem Hintergrund. (b) `BluetoothHeadset.startVoiceRecognition` — öffnet nur den SCO-Kanal, startet keinen Assistenten. (c) Anruf-Taste mitbelegen — vom Nutzer ausdrücklich nicht gewünscht; sie bleibt bei annehmen/auflegen. (d) Nachlaufsperre von 2 s nach dem Start — erwogen, auf Wunsch des Nutzers nicht eingebaut. Sperre in Telefonat und Klingeln: ANGENOMMEN nach AOSP-Quellcode — im Telefonat lässt das System Medientasten fremder Apps ohnehin nicht durch (Global-Priority-Session), ein langer Headset-Druck gilt beim Klingeln als „ablehnen“, und der Assistent würde einer Intercom-App das Mikrofon wegnehmen. |
 | Remote-Auswahl und Bestätigung (umgesetzt und am Gerät geprüft am 17.10.2026) | Der Systemdialog zeigt eine **Liste** (`AssociationRequest` ohne `setSingleDevice`), Filter nur das strenge Namensmuster `^Remote control-[0-9A-Fa-f]{4}$`. Der Nutzer wählt eine Remote und bestätigt sie innerhalb von 30 s mit einem Tastendruck an genau dieser Remote; ohne Druck wird die Kopplung per `disassociate` zurückgenommen. Als „die Remote“ gilt nur, was bestätigt wurde: die Assoziations-ID steht in `SharedPreferences` (`pairing`, §4). Der Dienst, nicht die Oberfläche, empfängt den Druck, besitzt die Frist und schreibt die Bestätigung. Das erste gültige Tastenpaket bestätigt (auch `UNKNOWN`), wird angezeigt, aber nicht ausgeführt. Keine neue Berechtigung, keine neue Abhängigkeit, kein Room. Ablauf: §3, Messungen: §11. | (a) `setSingleDevice(true)` (bisheriger Stand) — das System wählt den ersten Treffer selbst und koppelt ohne Liste; bei mehreren gleichen `Remote control-XXXX` (Gruppenfahrt) wäre es zufällig die falsche. (b) `ScanFilter` auf FFF0 — die Remote wirbt ohne Service-UUIDs (§11), der Filter würde sie aus dem Dialog ausschließen. (c) `BluetoothLeDeviceFilter.setRenameFromName` / `setRenameFromBytes` — beide indexieren im Systemprozess in Alias bzw. MAC und können dort eine Exception werfen, die die App nicht fangen kann (Begründung aus dem Code-Kommentar von `CompanionSetup.associate`; die Exception wurde nicht am Gerät ausgelöst). Der Dialog zeigt ohnehin den lesbaren Namen (§11, 17.10.2026 b). (d) Eigener BLE-Scan mit Assoziation per MAC — bräuchte `BLUETOOTH_SCAN`, und der Nutzer müsste trotzdem raten, welche MAC seine ist. (e) Stille Übernahme der einzigen vorhandenen Assoziation als Dauerregel (bisheriger Stand) — nur noch als einmalige Migration pro Installation (§3). (f) Bestätigung in der Oberfläche persistieren — ginge verloren, wenn der Nutzer die App zwischen Druck und Schreiben verlässt; der Dienst besitzt die Verbindung, auf der der Druck ankommt. |
+| Anzeige des zuständigen Assistenten, „A1“ (umgesetzt und am Gerät geprüft am 17.10.2026) | Die Statuskarte zeigt in der Zeile „Zuständiger Assistent“, welche App die Walkie-Talkie-Taste übernimmt, plus Knopf „Einstellungen öffnen“. Ermittelt wird per `PackageManager.queryIntentActivities` und `resolveActivity` auf `android.speech.action.VOICE_SEARCH_HANDS_FREE`, beide mit `MATCH_DEFAULT_ONLY`. Chooser („Wird beim Drücken abgefragt“) ausschließlich daran erkannt, dass die aufgelöste Komponente nicht in der Kandidatenliste steht. Anzeigename: `getApplicationLabel` → `loadLabel` → Paketname, danach bereinigt (Zeilenumbrüche und Steuerzeichen zu Leerzeichen, auf 60 Zeichen gekürzt). Dafür ein `<queries>`-Block im Manifest mit genau einer Action (`VOICE_SEARCH_HANDS_FREE`); das ist keine Berechtigung, §7 bleibt unverändert. Der Assistent ist ein eigener UI-Zustand in `MainActivity` (`rememberAssistantTarget`, auf `Dispatchers.IO`, ausgelöst vom vorhandenen `ON_RESUME`-Auffrischen), nicht Teil von `RemoteStatus` und nicht in der Benachrichtigung. Knopf: Kette aus drei Zielen, jede Stufe einzeln abgesichert: App-Infoseite der aufgelösten App, dann `ACTION_MANAGE_DEFAULT_APPS_SETTINGS`, dann `ACTION_VOICE_INPUT_SETTINGS`; scheitert alles, erscheint in der Zeile der Hinweis „Diese Systemseite gibt es auf diesem Gerät nicht.“ Gefangen werden `ActivityNotFoundException` („gibt es hier nicht“) und `SecurityException` („existiert, lässt sich aber von uns nicht starten“, bei Hersteller-Einstellungen möglich). Ausgewertet wird nur die Freisprech-Aktion, die Zeile zeigt genau einen Wert (Begründung: §11, Gerätetest A1). Ausführlich: §12. | (a) `Settings.Secure` („assistant“, „voice_interaction_service“) — `@hide`/`@TestApi`, und beschreibt den `ACTION_ASSIST`-Assistenten (Home-Taste), nicht den Empfänger der Medientaste. (b) `RoleManager.getRoleHolders` — `@SystemApi`, verlangt `MANAGE_ROLE_HOLDERS`. (c) `RoleManager.createRequestRoleIntent(ROLE_ASSISTANT)` — würde anbieten, UNSERE App zum Assistenten zu machen, statt die Wahl für die Medientaste zu ändern. (d) `QUERY_ALL_PACKAGES` statt `<queries>` — auf Google Play begründungspflichtig und unverhältnismäßig für eine einzige Action. Ohne jeden Eintrag liefert `resolveActivity` ab Android 11 `null`. (e) `resolveActivity`-Vortest vor jedem Knopfziel — die Paketsichtbarkeit würde ihn verfälschen, während `startActivity` davon unabhängig funktioniert; deshalb versucht jede Stufe direkt zu starten. (f) Zweite Zeile für `ACTION_WEB_SEARCH` (AOSP wählt sie bei entsperrtem Gerät mit Bildschirm an) — One UI nimmt auch dort die Freisprech-Aktion und hat für `WEB_SEARCH` keinen Standard; die zweite Zeile wäre auf dem Zielgerät falsch. |
 | Medien-Testumgebung | Gerätetests mit Amazon Music (`com.amazon.mp3`) auf dem S25 Ultra; Spotify und YouTube Music sind auf dem Testgerät (Nutzer 0) nicht installiert. Aktionen werden vor der BLE-Schicht über einen Debug-Testauslöser per adb geprüft (nur Debug-Build). | — |
 
 ## 3. Ablauf
@@ -148,6 +149,8 @@ Bewusst nicht: Standort, `BLUETOOTH_SCAN` (das System scannt; nur ergänzen, fal
 
 Manifest-Features: `android.hardware.bluetooth_le` (required), `android.software.companion_device_setup`.
 
+Manifest-Eintrag `<queries>` (seit 17.10.2026, keine Berechtigung): genau ein `<intent>` mit der Action `android.speech.action.VOICE_SEARCH_HANDS_FREE`. Ab Android 11 filtert die Paketsichtbarkeit; ohne den Eintrag liefert `resolveActivity` für diese Action `null`, und die Statuszeile „Zuständiger Assistent“ könnte die App nie nennen. Bewusst kein `QUERY_ALL_PACKAGES` (Entscheidung und Begründung: §2). Fehlt der Eintrag, steht in der Zeile „Nicht festgelegt“, also dasselbe wie bei einem Gerät ohne Assistent; nur wenn trotz leerer Kandidatenliste etwas aufgelöst wurde, schreibt `assistantTargetFor` eine Warnung ins Log.
+
 Hinweise: Während der Ersteinrichtung muss laut Google-Guide der Standort-Schalter (Systemeinstellung) aktiv sein. Samsung: App zusätzlich auf „Nie im Standby" setzen — keine offizielle Quelle, dass CDM vor der One-UI-Akkuoptimierung schützt.
 
 ## 8. Package-Struktur (`de.werklade.cratoniremote.*`)
@@ -161,7 +164,7 @@ Hinweise: Während der Ersteinrichtung muss laut Google-Guide der Standort-Schal
 | `action` | `ActionDispatcher`; je Aktion ein Interface mit Implementierung, damit ein späterer NotificationListener-Weg lokal bleibt: `MediaKeyExecutor` (`AudioManagerMediaKeyExecutor`), `VolumeExecutor` (`AudioManagerVolumeExecutor`), `CallExecutor` (`TelecomCallExecutor`), `LightExecutor` (`HelmetLightExecutor`), `AssistantExecutor` (`MediaKeyAssistantExecutor`, seit 16.10.2026) |
 | `helmet` | Rahmenbau, Lichtzustände und SPP-Client zum Helm (§13) |
 | `data` | `RemoteStatus` (StateFlow, geteilt von Service und UI; seit 17.10.2026 mit `pendingConfirmation`, `lastConfirmation`, `lastConfirmedAssociationId`), `RemoteStatusText` (Texte für Benachrichtigung und UI), seit 17.10.2026 `PairingConfirmation` (`PendingConfirmation`, `CONFIRMATION_TIMEOUT_MS`) |
-| `ui` | `MainActivity` (hält die Logik der Oberfläche; `PAIRING_SCOPE` für Kopplungsarbeit, die die Komposition überleben muss), `RemoteScreen` (Compose, Bestätigungskarte). Ein `RemoteViewModel` existiert nicht; `MainActivity` begründet das im Kommentar von `RemoteRoute`. |
+| `ui` | `MainActivity` (hält die Logik der Oberfläche; `PAIRING_SCOPE` für Kopplungsarbeit, die die Komposition überleben muss; seit 17.10.2026 `rememberAssistantTarget`), `RemoteScreen` (Compose, Bestätigungskarte; seit 17.10.2026 `AssistantRow` in der Statuskarte, direkt über „Letzter Befehl“), seit 17.10.2026 `AssistantTarget.kt` (`AssistantTarget` mit `App`, `AskedOnPress`, `None`; reine Entscheidung `assistantTargetFor`, Namensbereinigung `assistantLabel`, `resolveAssistantTarget` gegen den `PackageManager`; Knopfziele `AssistantSettingsPage`, `assistantSettingsPages`, `openAssistantPage`, `openAssistantSettings`). Test: `src/test/.../ui/AssistantTargetTest.kt` (33 `@Test`). Ein `RemoteViewModel` existiert nicht; `MainActivity` begründet das im Kommentar von `RemoteRoute`. |
 
 Regel: Die BLE-Schicht liefert nur Bytes und Verbindungszustand und führt keine Medienaktion aus.
 
@@ -189,6 +192,7 @@ Geplante Abhängigkeiten: Compose BOM (material3), activity-compose, lifecycle-v
 | 8 | Nach V1: Anruf-Taste (12.09.2026), Akkustand und Akkuwarnung (26.09.2026), Helm-Lichter (26.09.2026, §13) | — |
 | 9 | Nach V1: Walkie-Talkie-Taste startet den Sprachassistenten (16.10.2026, §12) inkl. Debug-Auslöser per adb und Unit-Tests | — |
 | 10 | Nach V1: Remote aus einer Liste wählen und per Tastendruck bestätigen (17.10.2026, §3, §11): Namensmuster, Bestätigungszustand und Dienst-Frist, `ConfirmedRemoteStore`, `PairingReconciler`/`PairingCleanup`, Sperren in Dispatch, Helm und Akku, zwei Startwege, Bestätigungskarte; 355 Unit-Tests, Gerätetest am S25 Ultra | — |
+| 11 | Nach V1: A1, Anzeige des zuständigen Sprachassistenten in der Statuskarte mit Knopf in die Systemeinstellungen (17.10.2026, §2, §12, §11): `ui/AssistantTarget.kt`, `<queries>`-Eintrag, Zeile `AssistantRow`, `rememberAssistantTarget` in `MainActivity`; 388 Unit-Tests (33 davon für Auflösung, Namensbereinigung und Reihenfolge der Knopfziele), Gerätetest am S25 Ultra | — |
 
 Jeder Schritt wird von code-reviewer geprüft; Commits nur auf Ansage des Projektinhabers.
 
@@ -338,6 +342,28 @@ Aufbau: Samsung S25 Ultra (SM-S938B), Android 16, One UI 8.5, echte Remote und H
 - Eine Remote mit abweichendem Namensformat erscheint durch das strenge Muster nicht im Dialog.
 - Neustart des Telefons mit dem neuen Stand nicht erneut geprüft (der Neustart-Test vom 12.09.2026 lief mit der Einzelkopplung).
 
+### Ergebnisse des Gerätetests vom 17.10.2026 (A1: Anzeige des zuständigen Assistenten)
+
+Aufbau: Samsung S25 Ultra, Android 16, One UI 8.5; `adb` mit `--user 0` (Secure-Folder-Nutzer 150 auf dem Testgerät), Auswertung über Logcat. Die Abfragen laufen in PowerShell oder Bash bei per adb verbundenem Gerät.
+
+```
+adb shell cmd package resolve-activity -a android.speech.action.VOICE_SEARCH_HANDS_FREE
+adb shell cmd package resolve-activity -a android.speech.action.WEB_SEARCH
+```
+
+- (a) VERIFIZIERT, `VOICE_SEARCH_HANDS_FREE`: aufgelöst auf `com.google.android.googlequicksearchbox/…voicesearch.handsfree.HandsFreeActivity`, `isDefault=true`.
+- (b) VERIFIZIERT, `WEB_SEARCH`: aufgelöst auf `android/com.android.internal.app.ResolverActivity`, `isDefault=false` — für diese Action ist kein Standard gesetzt.
+- (c) VERIFIZIERT, Tastendruck bei ENTSPERRTEM Handy mit eingeschaltetem Bildschirm: Logcat zeigt `MediaSessionService: about to use ACTION_VOICE_SEARCH_HANDS_FREE` und den Start der `HandsFreeActivity`. One UI nimmt die Freisprech-Aktion also auch im entsperrten Zustand. Das weicht vom AOSP-Standard ab: Dort wählt `MediaSessionService.startVoiceInput` bei entsperrtem Gerät mit eingeschaltetem Bildschirm `ACTION_WEB_SEARCH`, sonst `ACTION_VOICE_SEARCH_HANDS_FREE` (aus AOSP gelesen; für andere Geräte ANGENOMMEN). Deshalb wertet die App nur die Freisprech-Aktion aus und zeigt genau einen Wert.
+- (d) VERIFIZIERT, in der App: Die Zeile zeigt „Google“, der Knopf öffnet die App-Info von Google. Logcat bestätigt die Auflösung; der `<queries>`-Eintrag greift also aus der UID der App heraus.
+- (e) Unit-Tests: 388 `@Test` im Quellbaum (nachgezählt), 0 Fehler laut Testlauf vom 17.10.2026. 33 davon in `AssistantTargetTest` (Auflösung, Namensbereinigung, Reihenfolge der Knopfziele). Das sind 33 mehr als die 355 des Standes „Remote-Auswahl“.
+
+**Offen:**
+- Geräte ohne One UI: Welche Aktion dort greift (AOSP-Verhalten laut (c) ANGENOMMEN), ist ungeprüft. Ein Pixel 7 ist als Vergleichsgerät vorgesehen. Ein Moto Edge 20 Lite kann die App nicht installieren (`minSdk = 36`, das Gerät endet bei Android 12); dort ist nur die adb-Abfrage möglich.
+- Chooser-Zustand („Wird beim Drücken abgefragt“) am Gerät nicht gesehen; herstellbar nur, indem die Voreinstellung aufgehoben wird. Nur durch Unit-Tests der Entscheidung abgedeckt.
+- TalkBack-Ansagen der Zeile (Live-Region, lange Beschreibung des Knopfes) nicht geprüft.
+- Ein tatsächlich überlanger Fremdname wurde nicht gesehen; Kürzung auf 60 Zeichen und `valueMaxLines = 2` nur durch Unit-Tests bzw. Code belegt.
+- Zeile bei Arbeitsprofil oder Secure Folder: nicht geprüft (Grenze siehe §12).
+
 ### Bekannte kleine Mängel (offen, bewusst zurückgestellt)
 
 - `CratoniBleManager`: Fehlt beim rein diagnostischen Lesen von `2A50` (PnP ID) oder `FFF4` die Berechtigung `BLUETOOTH_CONNECT`, läuft der Code in `failMissingPermission` und beendet damit eine bestehende Verbindung — im Widerspruch zur Zusage, dass diagnostische Schritte den Verbindungszustand nie verändern. Praktisch kaum erreichbar, weil ein Berechtigungsentzug den Prozess ohnehin beendet. Fix: an beiden Stellen nur loggen und zurückkehren, wie im Zweig „Characteristic nicht gefunden". Zurückgestellt am 12.09.2026, damit der laufende Alltagstest nicht unterbrochen werden muss.
@@ -346,7 +372,7 @@ Aufbau: Samsung S25 Ultra (SM-S938B), Android 16, One UI 8.5, echte Remote und H
 
 ## 12. Erweiterungen nach V1
 
-Der erste Abschnitt ist umgesetzt (16.10.2026); die übrigen sind Ideen und nicht umgesetzt. Die Remote-Auswahl aus einer Liste (17.10.2026) steht nicht hier, sondern in §3, §4 und §11.
+Der erste Abschnitt ist umgesetzt (16.10.2026), einschließlich der Anzeige des zuständigen Assistenten (A1, 17.10.2026); die übrigen sind Ideen und nicht umgesetzt. Die Remote-Auswahl aus einer Liste (17.10.2026) steht nicht hier, sondern in §3, §4 und §11.
 
 ### Walkie-Talkie-Taste startet den Sprachassistenten (umgesetzt und am Gerät geprüft am 16.10.2026)
 
@@ -380,14 +406,53 @@ Der erste Abschnitt ist umgesetzt (16.10.2026); die übrigen sind Ideen und nich
 
 **Grenzen:**
 - Der Weg ist nicht offiziell dokumentiert — ein künftiges Android- oder One-UI-Update kann das Verhalten ändern; die Taste würde dann stillschweigend wirkungslos (das Log zeigt die Ereignisse weiterhin als gesendet).
-- Beim ersten Druck fragt Android, welche App öffnen soll; mit „Google" und „Immer" ist das dauerhaft erledigt. Welcher Assistent zuständig ist, entscheidet die Systemeinstellung, nicht die App.
+- Beim ersten Druck fragt Android, welche App öffnen soll; mit „Google" und „Immer" ist das dauerhaft erledigt. Welcher Assistent zuständig ist, entscheidet die Systemeinstellung, nicht die App; die Statuskarte zeigt ihn seit 17.10.2026 an und öffnet auf Wunsch die Einstellungen (A1, unten).
 - Die Taste ist damit belegt und steht nicht mehr für Push-to-Talk oder Mikrofon-Stummschaltung zur Verfügung (siehe unten).
 
 **Offen / später geplant:**
 - B: Die Remote aus einer Liste wählen (statt der bisherigen Einzelkopplung). **Umgesetzt und am Gerät geprüft am 17.10.2026** (§3, §4, §11). Offen aus diesem Punkt: Liste mit mehreren Remotes (nur eine vorhanden; geplant mit zweitem Handy und nRF-Connect-Advertiser), TalkBack-Verhalten der Live-Regions, Startweg über die Oberfläche am Gerät, Remote mit abweichendem Namensformat — Einzelheiten unter „Offen“ im Gerätetest vom 17.10.2026 in §11.
-- A1: In der App anzeigen, welcher Assistent zuständig ist, mit einem Knopf in die Systemeinstellung. Nicht umgesetzt; ob und wie die App den zuständigen Assistenten ohne zusätzliche Berechtigung ermitteln kann, ist nicht geprüft.
+- A1: In der App anzeigen, welcher Assistent zuständig ist, mit einem Knopf in die Systemeinstellung. **Umgesetzt und am Gerät geprüft am 17.10.2026**, ohne zusätzliche Berechtigung (Beschreibung unten, Entscheidung §2, Messungen §11). Offen aus diesem Punkt: Vergleichsgerät ohne One UI (Pixel 7), Chooser-Zustand, TalkBack-Ansagen, überlanger Fremdname.
+- Weiterhin offen, nicht Teil von A1 oder B: Messung des Paketverlusts im Telefonat (§13, Befund „Telefonat“); Review-Befunde am Helm-Code (§13, „Vor dem Weiterbau zu beheben“); die Testcheckliste (Schritt 7 in §10; im README steht sie derzeit nicht); der Schalter „Pausieren“ (unten); Vergleichsgerät ohne One UI für A1.
 
 **Folgen für die beiden nächsten Ideen** (Push-to-Talk, Mikrofon stummschalten): Sie waren für dieselbe Taste gedacht und stehen jetzt im Konflikt mit deren Belegung. Sie bleiben als Hintergrund und als mögliche spätere Erweiterung stehen; eine Umsetzung bräuchte eine andere Taste oder eine umschaltbare Belegung. Hinzu kommt: Die Sperre bei `MODE_IN_COMMUNICATION` betrifft genau die Intercom-Apps, für die PTT gedacht war — die Taste tut dort derzeit nichts.
+
+#### A1: Anzeige des zuständigen Assistenten (umgesetzt und am Gerät geprüft am 17.10.2026)
+
+**Anzeige.** Die Statuskarte hat eine neue Zeile „Zuständiger Assistent“ (`AssistantRow`), direkt über „Letzter Befehl“. Werte:
+
+| Wert in der Zeile | Bedeutung (`AssistantTarget`) |
+|---|---|
+| App-Name, z. B. „Google“ | `App`: genau eine App beantwortet die Freisprech-Aktion als Standard |
+| „Nicht festgelegt“ | `None`: nichts beantwortet die Aktion (oder der `<queries>`-Eintrag fehlt, §7) |
+| „Wird beim Drücken abgefragt“ | `AskedOnPress`: Apps beantworten sie, aber keine ist Standard; das System fragt bei jedem Druck |
+| „Wird ermittelt …“ | noch keine Antwort (`null`) |
+
+Daneben der Knopf „Einstellungen öffnen“ (Sprachausgabe: „Assistent-Einstellungen öffnen“). Er ist immer sichtbar: ohne Standard dient er zum Festlegen, mit Standard zum Ändern. Der Assistent steht nicht in der Benachrichtigung. Er gehört nicht zum Zustand der Fernbedienung (`RemoteStatus`), sondern ist ein eigener UI-Zustand: `rememberAssistantTarget(refreshKey)` in `MainActivity` fragt auf `Dispatchers.IO` und wird durch das vorhandene `ON_RESUME`-Auffrischen (`refreshKey`) ausgelöst. Es gibt keinen Broadcast, auf den man hören könnte; die Wahl ändert sich nur in den Systemeinstellungen oder im Chooser, beides ein Umweg aus der Oberfläche heraus. Beim Auffrischen bleibt die vorige Antwort sichtbar; nur eine Neuerstellung der Activity (z. B. Drehung) beginnt wieder bei „Wird ermittelt …“. Die Zeile ist eine Live-Region und zeigt den Wert auf höchstens zwei Zeilen.
+
+**Ermittlung** (`resolveAssistantTarget`, `ui/AssistantTarget.kt`): `queryIntentActivities` und `resolveActivity` auf `android.speech.action.VOICE_SEARCH_HANDS_FREE`, beide mit `MATCH_DEFAULT_ONLY` (die Taste endet in einem `startActivity`, das nur Aktivitäten mit `CATEGORY_DEFAULT` berücksichtigt; nur mit dem Flag antwortet `resolveActivity` ohne Standard mit der Resolver-Activity statt mit einem beliebigen Treffer). Die Entscheidung `assistantTargetFor` ist reines Kotlin ohne Android-Typen:
+
+- nichts aufgelöst → `None`
+- aufgelöste Komponente steht in der Kandidatenliste → `App`
+- aufgelöste Komponente steht **nicht** darin → `AskedOnPress`. Erkannt ausschließlich so, nie über Klassennamen wie `ResolverActivity`, weil Hersteller eigene Resolver mitbringen.
+- keine Kandidaten, aber etwas aufgelöst → `None` und eine Logzeile (nur möglich, wenn der `<queries>`-Eintrag fehlt oder weggefiltert wird)
+
+Anzeigename: `getApplicationLabel` → `loadLabel` → Paketname. Weil der Name aus einer fremden App stammt, wird er bereinigt (`assistantLabel`): Whitespace, Steuer- und Formatzeichen (auch bidi-Overrides) werden zu einzelnen Leerzeichen, über 60 Zeichen wird mit „…“ gekürzt, ohne ein Surrogatpaar zu zerschneiden.
+
+**Knopf** (`openAssistantSettings`): Kette aus drei Zielen, die erste erfolgreich gestartete Seite beendet sie:
+
+1. App-Infoseite der aufgelösten App (`ACTION_APPLICATION_DETAILS_SETTINGS`) — nur ein Schritt, wenn eine App bekannt ist; nur dort lässt sich „Standardmäßig öffnen“ zurücknehmen
+2. `ACTION_MANAGE_DEFAULT_APPS_SETTINGS`
+3. `ACTION_VOICE_INPUT_SETTINGS`
+
+Jede Stufe hat ihr eigenes `try`; `ActivityNotFoundException` („gibt es hier nicht“) und `SecurityException` („existiert, lässt sich aber von uns nicht starten“, bei Hersteller-Einstellungen möglich) führen zur nächsten Stufe. Schlägt alles fehl, erscheint unter der Zeile „Diese Systemseite gibt es auf diesem Gerät nicht.“ Kein `resolveActivity`-Vortest (§2). Ein `true` sagt nur, dass eine Seite aufging, nicht dass sich die Wahl dort ändern lässt. Nach der Rückkehr aktualisiert sich die Zeile über `ON_RESUME`.
+
+**Was die Anzeige NICHT aussagt:**
+
+- Sie ist eine zweite, unabhängige Abfrage an das System und nicht das, was die Taste tat. Die Wahl kann sich bis zum nächsten Druck ändern.
+- Sie sagt nichts über `ACTION_ASSIST` (Home-Langdruck, „digitale Assistenten-App“) und nichts über „Okay Google“. Auf einem Gerät kann dort ein anderer Assistent stehen als hier.
+- Sie sagt nicht, ob die App dann wirklich zuhört: Sie kann Entsperren verlangen, die Mikrofonberechtigung oder eine eigene Einrichtung brauchen.
+- Benutzerprofil: `MediaSessionService` startet die Sprachsuche als `UserHandle.CURRENT`, die App löst im eigenen Nutzer auf. Bei Arbeitsprofil oder Secure Folder (Testgerät: Nutzer 150) kann die startende App eine andere sein als die angezeigte. Landet die Auflösung auf der Weiterleitungs-Activity eines anderen Profils, steht sie ebenfalls nicht in den Kandidaten; die Zeile zeigt dann „Wird beim Drücken abgefragt“, obwohl ohne Rückfrage weitergeleitet würde. Beides am Gerät nicht geprüft.
+- Sie wertet nur `VOICE_SEARCH_HANDS_FREE` aus. Auf dem Testgerät wählt One UI diese Aktion auch bei entsperrtem Gerät mit eingeschaltetem Bildschirm (§11, Gerätetest A1, Punkt c); für Geräte mit AOSP-Verhalten (dort `ACTION_WEB_SEARCH` in diesem Zustand) ist die Anzeige ANGENOMMEN unvollständig.
 
 ### Walkie-Talkie-Taste als Push-to-Talk (Wunsch vom 11.09.2026)
 
