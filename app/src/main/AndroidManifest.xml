@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- GATT connection to the remote; also the prerequisite for the FGS type connectedDevice.
+         protectionLevel=dangerous (verified on the S25 Ultra, Android 16), requested at runtime. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Foreground service notification. protectionLevel=dangerous|instant (verified), requested at runtime.
+         Without it the service still runs, but its notification stays invisible. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Run RemoteConnectionService as a foreground service. protectionLevel=normal|instant (verified). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Foreground service type connectedDevice. protectionLevel=normal|instant (verified). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- CompanionDeviceManager.startObservingDevicePresence. protectionLevel=normal (verified). -->
+    <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
+
+    <!-- Start RemoteConnectionService from CratoniCompanionService while the app is in the background.
+         protectionLevel=normal (verified). -->
+    <uses-permission
+        android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+
+    <!-- The remote's call button: TelecomManager.acceptRingingCall() and endCall() (see TelecomCallExecutor).
+         protectionLevel=dangerous, requested at runtime. Denying it only costs that one button. -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+
+    <!-- Deliberately not declared (docs/architektur.md §7):
+         READ_PHONE_STATE — only TelecomManager.isInCall() would need it, and it could not tell a ringing
+             call from a running one; the call state comes from AudioManager.mode instead, free of charge.
+         MANAGE_ONGOING_CALLS — would allow an InCallService, but is only granted through a companion
+             association with a WATCH or GLASSES device profile (see TelecomCallExecutor).
+         BLUETOOTH_SCAN — the system scans for the association dialog, the app never scans itself.
+         REQUEST_COMPANION_RUN_IN_BACKGROUND — background work happens in the foreground service, which is
+             started through the companion presence exemption above; no evidence it is needed.
+         ACCESS_FINE_LOCATION, WAKE_LOCK, RECEIVE_BOOT_COMPLETED, notification listener permissions. -->
+
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="true" />
+
+    <uses-feature
+        android:name="android.software.companion_device_setup"
+        android:required="true" />
+
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.CratoniRemote">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Holds the BLE connection while the remote is present. Started and stopped only by
+             CratoniCompanionService, therefore not exported. -->
+        <service
+            android:name=".service.RemoteConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Bound by the system for device presence events. Must be exported and must require
+             BIND_COMPANION_DEVICE_SERVICE (protectionLevel=signature, verified), so only the platform can bind it.
+             Action = CompanionDeviceService.SERVICE_INTERFACE. -->
+        <service
+            android:name=".companion.CratoniCompanionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+            <intent-filter>
+                <action android:name="android.companion.CompanionDeviceService" />
+            </intent-filter>
+        </service>
+
+    </application>
+
+</manifest>

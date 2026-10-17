@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CRATONI Remote</string>
+
+    <!-- Foreground service notification (texts of the one-line status come from RemoteStatusText, not from here) -->
+    <string name="notification_channel_name">Remote-Verbindung</string>
+    <string name="notification_channel_description">Läuft, solange die Fernbedienung in Reichweite ist.</string>
+
+    <!-- Low battery warning: own, audible channel (LowBatteryNotifier); the channel above stays silent. -->
+    <string name="low_battery_channel_name">Akkuwarnung</string>
+    <string name="low_battery_channel_description">Meldet einmalig, wenn der Akku der Fernbedienung 20 %, 10 % und 0 % erreicht.</string>
+    <string name="low_battery_title">Fernbedienung</string>
+    <!-- %1$s is the measurement from RemoteStatusText.batteryValue, e.g. "20 % (3,68 V)". -->
+    <string name="low_battery_text">Akku bei %1$s</string>
+
+    <!-- Status card labels -->
+    <string name="label_bluetooth_status">Bluetooth</string>
+    <string name="label_remote_status">Fernbedienung</string>
+    <string name="label_battery">Akkustand</string>
+    <string name="label_helmet">Helm</string>
+    <string name="label_lights">Licht</string>
+    <string name="label_last_command">Letzter Befehl</string>
+
+    <string name="bluetooth_on">Aktiv</string>
+    <string name="bluetooth_off">Aus</string>
+
+    <!-- Remote connection state -->
+    <string name="remote_status_not_configured">Nicht eingerichtet</string>
+    <!-- Set up, but the system has not reported the remote as present: the normal idle state, not an error.
+         Same wording as RemoteStatusText.OUT_OF_RANGE, which says it in the notification. -->
+    <string name="remote_status_out_of_range">Nicht in Reichweite – verbindet sich automatisch</string>
+    <string name="remote_status_disconnected">Getrennt</string>
+    <string name="remote_status_connecting">Verbindung wird aufgebaut</string>
+    <string name="remote_status_discovering">Dienste werden gesucht</string>
+    <string name="remote_status_enabling_notifications">Benachrichtigungen werden aktiviert</string>
+    <string name="remote_status_connected">Verbunden</string>
+    <string name="remote_status_waiting_for_bluetooth">Wartet auf Bluetooth</string>
+    <!-- A remote was chosen in the association dialog and the press confirming it is being waited for.
+         Same wording as RemoteStatusText.CONFIRMING, which says it in the notification. -->
+    <string name="remote_status_confirming">Tastendruck an der Remote wird erwartet</string>
+    <string name="remote_status_reconnecting">Neuer Versuch %1$d von %2$d in %3$d s</string>
+    <string name="remote_status_error">Fehler: %1$s</string>
+
+    <!-- Helmet (classic Bluetooth/SPP, docs/architektur.md §13). "Nicht gefunden" means: no paired helmet whose
+         name starts with SMARTRIDE, or more than one. -->
+    <string name="helmet_status_disconnected">Nicht verbunden</string>
+    <string name="helmet_status_not_found">Nicht gefunden</string>
+    <string name="helmet_status_connecting">Verbindung wird aufgebaut</string>
+    <string name="helmet_status_connected">Verbunden</string>
+    <string name="helmet_status_error">Nicht verbunden (%1$s)</string>
+    <string name="helmet_failure_bluetooth_unavailable">Bluetooth ist aus</string>
+    <string name="helmet_failure_missing_permission">Berechtigung fehlt</string>
+    <string name="helmet_failure_connect">Helm nicht erreichbar</string>
+    <string name="helmet_failure_send">Übertragung abgebrochen</string>
+
+    <!-- State of the helmet's three lights. What the app believes, not a measurement: the helmet confirms
+         nothing. Several parts are joined with lights_separator. -->
+    <string name="lights_off">Aus</string>
+    <!-- xml:space, otherwise the trailing space of the separator is stripped at build time. -->
+    <string name="lights_separator" xml:space="preserve">, </string>
+    <string name="light_turn_left_on">Blinker links an</string>
+    <string name="light_turn_right_on">Blinker rechts an</string>
+    <string name="light_rear_solid">Rücklicht leuchtet</string>
+    <string name="light_rear_blinking">Rücklicht blinkt</string>
+
+    <!-- Failure reasons, in understandable terms rather than status codes -->
+    <string name="failure_bluetooth_adapter_missing">Kein Bluetooth verfügbar</string>
+    <string name="failure_bluetooth_disabled">Bluetooth ist ausgeschaltet</string>
+    <string name="failure_missing_permission">Berechtigung fehlt</string>
+    <string name="failure_gatt_error">Verbindungsfehler beim %1$s</string>
+    <string name="failure_connection_lost">Verbindung verloren</string>
+    <string name="failure_operation_not_started">%1$s konnte nicht gestartet werden</string>
+    <string name="failure_timeout">Zeitüberschreitung beim %1$s</string>
+    <string name="failure_device_unsuitable">Gerät nicht passend (%1$s fehlt)</string>
+
+    <string name="gatt_step_connect">Verbinden</string>
+    <string name="gatt_step_discover_services">Suchen der Dienste</string>
+    <string name="gatt_step_enable_notifications">Aktivieren der Benachrichtigungen</string>
+
+    <!-- Battery. The value itself ("60 % (3,74 V)", "Unbekannt") comes from RemoteStatusText.batteryValue,
+         which fixes the number format to German regardless of the device locale. -->
+    <string name="battery_measured_at">gemessen um %1$s</string>
+    <!-- Used instead of battery_measured_at once the measurement time carries a date (RemoteStatusText.showsDate):
+         a connection can stand across midnight and the poll stands still in deep sleep. -->
+    <string name="battery_measured_at_date">gemessen am %1$s</string>
+
+    <!-- Last command -->
+    <string name="last_command_none">Noch kein Befehl empfangen</string>
+    <string name="last_command_time">um %1$s</string>
+    <!-- Used instead of last_command_time once the timestamp carries a date (RemoteStatusText.showsDate). -->
+    <string name="last_command_date_time">am %1$s</string>
+    <string name="last_command_display_only_note">Löst in dieser Version keine Aktion aus, wird nur angezeigt</string>
+
+    <string name="command_play_pause">Play/Pause</string>
+    <string name="command_next">Nächster Titel</string>
+    <string name="command_previous">Vorheriger Titel</string>
+    <string name="command_volume_up">Lauter</string>
+    <string name="command_volume_down">Leiser</string>
+    <string name="command_call">Anruf</string>
+    <string name="command_walkie_talkie">Sprachassistent</string>
+    <string name="command_turn_left">Blinker links</string>
+    <string name="command_turn_right">Blinker rechts</string>
+    <string name="command_rear_light">Rücklicht</string>
+    <string name="command_unknown">Unbekannt</string>
+
+    <!-- Actions -->
+    <string name="action_set_up">Einrichten</string>
+    <string name="action_forget">Remote vergessen</string>
+    <string name="action_request_permissions">Berechtigungen erteilen</string>
+    <string name="permissions_missing">Fehlende Berechtigungen: %1$s</string>
+    <string name="setup_failed">Einrichtung konnte nicht gestartet werden. Bitte erneut versuchen.</string>
+
+    <!-- Confirmation of the chosen remote: the association dialog shows a list (several identical CRATONI
+         remotes on a group ride), so the choice is confirmed by a press on that very remote. -->
+    <string name="confirmation_title">Remote bestätigen</string>
+    <!-- %1$s is the name of the chosen remote, e.g. "Remote control-3D2C", or remote_fallback_name. -->
+    <string name="confirmation_message">Drücke jetzt eine beliebige Taste an %1$s.</string>
+    <!-- %1$d is the remaining time in whole seconds. -->
+    <string name="confirmation_remaining">Noch %1$d s</string>
+    <string name="confirmation_hint_wrong_remote">Falls das nicht deine Remote ist: einfach nichts drücken.</string>
+    <string name="action_cancel_confirmation">Abbrechen</string>
+    <string name="confirmation_failed_timeout">Es kam kein Tastendruck – die Kopplung wurde zurückgenommen. Bitte erneut einrichten.</string>
+    <string name="confirmation_cancelled">Abgebrochen – die Kopplung wurde zurückgenommen.</string>
+    <!-- Something on the way failed (the connection for the press could not be held, the safety net for a
+         process death could not be written); the pairing is taken back. Not a cancellation by the user. -->
+    <string name="confirmation_failed_internal">Die Einrichtung konnte nicht abgeschlossen werden – die Kopplung wurde zurückgenommen. Bitte erneut versuchen.</string>
+    <string name="confirmation_failed_bluetooth_off">Bluetooth ist aus – die Kopplung wurde zurückgenommen. Bitte Bluetooth einschalten und erneut einrichten.</string>
+    <!-- Used wherever the system offers no usable name for the chosen remote. -->
+    <string name="remote_fallback_name">der ausgewählten Fernbedienung</string>
+
+    <!-- Runtime permissions in the words of the system settings instead of their technical names -->
+    <string name="permission_bluetooth_connect">Bluetooth-Zugriff</string>
+    <string name="permission_post_notifications">Benachrichtigungen</string>
+    <string name="permission_answer_phone_calls">Anrufe annehmen</string>
+
+    <string name="forget_confirm_title">Remote vergessen?</string>
+    <string name="forget_confirm_message">Die Kopplung mit der Fernbedienung wird entfernt. Für die weitere Nutzung ist danach eine neue Einrichtung nötig.</string>
+    <string name="forget_confirm_confirm">Entfernen</string>
+    <string name="forget_confirm_cancel">Abbrechen</string>
+
+    <!-- Hints, shown only when they apply -->
+    <string name="hint_call_permission_missing">Ohne die Berechtigung „Anrufe annehmen“ bleibt die Anruf-Taste der Fernbedienung wirkungslos. Alle anderen Tasten funktionieren weiterhin.</string>
+    <string name="hint_notification_permission_missing">Ohne Benachrichtigungsberechtigung zeigt das System den Verbindungsstatus nicht in der Statusleiste an.</string>
+    <string name="hint_battery_optimization">Für eine zuverlässige Verbindung die Akkuoptimierung dieser App auf „Nie im Standby“ stellen.</string>
+    <string name="hint_location_required">Zum Einrichten muss der Standort-Schalter in den Systemeinstellungen aktiviert sein.</string>
+    <!-- Shown before setting up: the dialog lists every CRATONI remote in range, and they look alike. -->
+    <string name="hint_choose_your_remote">Beim Einrichten listet das System alle Fernbedienungen in der Nähe auf. Welche davon deine ist, bestätigst du danach mit einem Tastendruck an ihr.</string>
+</resources>

@@ -1,0 +1,15 @@
+# Android (Kotlin, Gradle)
+/build/
+**/build/
+.gradle/
+local.properties
+.idea/
+*.iml
+.kotlin/
+*.jks
+*.keystore
+keystore.properties
+# Allgemein
+Thumbs.db
+.DS_Store
+*.bak

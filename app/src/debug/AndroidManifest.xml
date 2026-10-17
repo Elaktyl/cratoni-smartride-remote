@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!-- Debug build only: adb test trigger for the action layer. DUMP is held by the adb shell and
+             privileged system apps; being a development permission, it can be granted to any app
+             declaring it via `adb shell pm grant`. -->
+        <receiver
+            android:name=".debug.DebugCommandReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <!-- Debug build only: adb test trigger for the BLE layer. DUMP is held by the adb shell and
+             privileged system apps; being a development permission, it can be granted to any app
+             declaring it via `adb shell pm grant`. -->
+        <receiver
+            android:name=".debug.DebugBleReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+    </application>
+
+</manifest>
