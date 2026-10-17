@@ -89,6 +89,18 @@ class HelmetSppClient(
     private var output: OutputStream? = null
 
     /**
+     * Address of the bonded device [findHelmet] last resolved, `null` until one was resolved at all (no
+     * [connect] has run yet, or none matched). Written on the worker thread, read from the main thread by
+     * `service.RemoteConnectionService` when a classic Bluetooth ACL event arrives, hence `@Volatile`.
+     *
+     * It is set even when the following `connect()` fails, which is the case that matters: the helmet is off,
+     * so the connection attempt at "remote connected" ends in [HelmetConnectionState.Failed] but the address of
+     * the bonded helmet is known from then on.
+     */
+    @Volatile
+    private var resolvedAddress: String? = null
+
+    /**
      * Opens the SPP connection if none is open; idempotent and non-blocking.
      *
      * A second call while connecting or connected does nothing, so it can be called on every "remote
@@ -102,8 +114,9 @@ class HelmetSppClient(
      * Queues [frame] for the standing connection.
      *
      * Returns `false` without sending anything if there is no connection, and then starts a connection attempt
-     * so the next press can work — that is the only reconnect path in this version; nothing is scheduled and
-     * nothing is retried automatically.
+     * so the next press can work — the fallback behind the
+     * service's ACL receiver, which opens the connection the moment the helmet is switched on; nothing is
+     * scheduled and nothing is retried automatically.
      *
      * [frame] is copied, so the caller may reuse its array.
      */
@@ -148,6 +161,14 @@ class HelmetSppClient(
         Log.i(TAG, "Helmet: client closed")
     }
 
+    /**
+     * Address of the helmet this client talks to, as far as it is known: the bonded device a previous [connect]
+     * resolved, `null` before that. No Bluetooth call and no permission needed, so it can be read from a
+     * broadcast receiver on the main thread (`service.RemoteConnectionService` compares it with the device of
+     * an ACL event, see `service.isHelmetDevice`).
+     */
+    fun knownAddress(): String? = resolvedAddress
+
     /** Queues [block]; `false` if the client is closed or the executor refused it. */
     private fun submit(operation: String, block: () -> Unit): Boolean {
         if (closed.get()) {
@@ -191,6 +212,7 @@ class HelmetSppClient(
             setState(HelmetConnectionState.NotFound)
             return
         }
+        resolvedAddress = device.address
         setState(HelmetConnectionState.Connecting)
         try {
             val opened = device.createRfcommSocketToServiceRecord(SPP_UUID)

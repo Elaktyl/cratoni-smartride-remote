@@ -1,16 +1,19 @@
 package de.werklade.cratoniremote.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.os.IBinder
@@ -73,6 +76,12 @@ import kotlinx.coroutines.launch
  * keeps the client usable, because the service stays up and connects everything again on `STATE_ON` — and for
  * good in [onDestroy] ([HelmetSppClient.close]). Every fresh helmet connection makes [HelmetLightExecutor]
  * forget what the lights were doing, because the helmet was out of reach or off and its lights are off.
+ *
+ * A helmet that was off in that very moment is caught by a second runtime-registered receiver,
+ * [helmetAclReceiver]: switching the helmet on makes it connect to the phone as a classic Bluetooth device, and
+ * [BluetoothDevice.ACTION_ACL_CONNECTED] for it opens the SPP connection ([helmetShouldConnect]). Until then
+ * the only way back was a light button press, which started a connection and lost its own frame
+ * ([HelmetSppClient.send]) — that path is unchanged, it is just no longer the only one.
  *
  * Second job since the association dialog offers a list: [ACTION_CONFIRM_ASSOCIATION] connects to a remote the
  * user has chosen but not confirmed yet, so the confirmation press can be received here — the UI cannot, it has
@@ -209,6 +218,9 @@ class RemoteConnectionService : Service() {
     private var startedForeground = false
     private var receiverRegistered = false
 
+    /** Own flag for [helmetAclReceiver], like [receiverRegistered] for [bluetoothReceiver]. */
+    private var helmetReceiverRegistered = false
+
     /**
      * Association of the remote this service is running for, from the last presence event;
      * [NO_ASSOCIATION_ID] means "the only association" (see [CompanionSetup.remoteDevice]). Kept so the service
@@ -272,6 +284,112 @@ class RemoteConnectionService : Service() {
         }
     }
 
+    /**
+     * Notices the helmet being switched on. Runtime-registered like [bluetoothReceiver] (both actions are
+     * protected system broadcasts and may not be declared in the manifest since Android 8).
+     *
+     * The helmet connects to the phone as a classic Bluetooth device (headset/hands-free) when it is switched
+     * on, which the system reports as [BluetoothDevice.ACTION_ACL_CONNECTED]. Before this receiver existed the
+     * SPP connection was only attempted in the moment the remote connected, so a helmet that was off or out of
+     * range at that point stayed unreachable until a light button was pressed — and that first press was lost
+     * ([HelmetSppClient.send]), the status card said "Helm nicht erreichbar" until then (device test
+     * 17.10.2026).
+     *
+     * [helmetShouldConnect] decides. [BluetoothDevice.ACTION_ACL_DISCONNECTED] never connects: the ACL link is
+     * the link the RFCOMM channel runs on, so when it goes the socket is dead, and the client would only notice
+     * that on the next write (an [java.io.IOException] in its `sendOnWorker`, i.e. one lost frame). Closing it
+     * here keeps the published state and the status card honest and leaves the client ready for the next
+     * `connect()` — the same thing the `STATE_OFF` branch above does, and for the same reason.
+     *
+     * Nothing else in the helmet path changes: the connection at "remote connected", the silence during a
+     * confirmation, [HelmetLightExecutor.reset] on a fresh connection and the reconnect through
+     * [HelmetSppClient.send] all stay as they are.
+     */
+    private val helmetAclReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action
+            if (action != BluetoothDevice.ACTION_ACL_CONNECTED &&
+                action != BluetoothDevice.ACTION_ACL_DISCONNECTED
+            ) {
+                return
+            }
+            // Both actions carry EXTRA_TRANSPORT. The SPP socket lives on BR/EDR only, so an LE event of the
+            // same address says nothing about it: acting on an LE disconnect would close a healthy socket, and
+            // an LE connect would start a pointless attempt. Our own GATT connections to the remote raise LE
+            // events too, which is why this comes before anything that costs a binder call.
+            val transport = intent.getIntExtra(BluetoothDevice.EXTRA_TRANSPORT, BluetoothDevice.TRANSPORT_BREDR)
+            if (transport == BluetoothDevice.TRANSPORT_LE) {
+                Log.d(TAG, "Helmet: $action over LE ignored, the control connection is classic Bluetooth")
+                return
+            }
+            val device = aclDevice(intent) ?: return
+            val helmetAddress = helmet.knownAddress()
+            if (!isHelmetDevice(device, helmetAddress, HelmetSppClient.HELMET_NAME_PREFIX)) {
+                Log.d(TAG, "Helmet: $action of ${BleLog.mac(device.address)} is not the helmet, ignored")
+                return
+            }
+            val helmetState = helmet.connectionState.value
+            if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
+                if (helmetState == HelmetConnectionState.Connected ||
+                    helmetState == HelmetConnectionState.Connecting
+                ) {
+                    Log.i(TAG, "Helmet: switched off or out of range, closing the dead SPP socket")
+                    helmet.disconnect()
+                } else {
+                    Log.d(TAG, "Helmet: disconnected as a classic device, no socket to close ($helmetState)")
+                }
+                return
+            }
+            val remoteConnected = bleManager?.connectionState?.value == BleConnectionState.Connected
+            val allowed = dispatchAllowed(RemoteStatus.state.value)
+            val connect = helmetShouldConnect(
+                device,
+                helmetAddress,
+                HelmetSppClient.HELMET_NAME_PREFIX,
+                helmetState,
+                allowed,
+                remoteConnected,
+            )
+            if (connect) {
+                Log.i(TAG, "Helmet: switched on (${BleLog.mac(device.address)}), opening the SPP connection")
+                helmet.connect()
+            } else {
+                Log.i(
+                    TAG,
+                    "Helmet: connected as a classic device, no SPP connection " +
+                        "(helmet=$helmetState, remote connected=$remoteConnected, dispatch allowed=$allowed)",
+                )
+            }
+        }
+    }
+
+    /**
+     * The device of an ACL broadcast, or `null` if there is nothing usable to decide on — then the event is
+     * dropped silently, like everywhere else in this app when `BLUETOOTH_CONNECT` is missing.
+     *
+     * Both [BluetoothDevice.getAddress] and [BluetoothDevice.getName] are behind `BLUETOOTH_CONNECT` for an app
+     * targeting Android 12 or later; the permission is checked here (lint only sees a check in the same method)
+     * and a [SecurityException] is caught on top, because a revoked permission must not take the service down
+     * from inside a broadcast.
+     */
+    private fun aclDevice(intent: Intent): AclDevice? {
+        val device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+        if (device == null) {
+            Log.w(TAG, "Helmet: ${intent.action} without a device, ignored")
+            return null
+        }
+        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "Helmet: ${intent.action} ignored, BLUETOOTH_CONNECT is not granted")
+            return null
+        }
+        return try {
+            AclDevice(device.address, device.name)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Helmet: ${intent.action} ignored, reading the device was refused", e)
+            null
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Service: created")
@@ -283,6 +401,18 @@ class RemoteConnectionService : Service() {
             Context.RECEIVER_NOT_EXPORTED,
         )
         receiverRegistered = true
+        registerReceiver(
+            helmetAclReceiver,
+            IntentFilter(BluetoothDevice.ACTION_ACL_CONNECTED).apply {
+                addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            },
+            // Measured on the test device (17.10.2026): with RECEIVER_NOT_EXPORTED the ACL broadcasts never
+            // arrive, although other apps receive them and BLUETOOTH_CONNECT is granted. Both actions are
+            // protected broadcasts, so only the system can send them and exporting the receiver opens nothing:
+            // a forged event could at most ask for a connection to the helmet this app already knows.
+            Context.RECEIVER_EXPORTED,
+        )
+        helmetReceiverRegistered = true
         observeHelmet()
         // Opens the pairing preferences file off the main thread, so the first "is this the confirmed remote?"
         // in [connectToRemote] is less likely to wait for the disk. Nobody waits for this, so it is no
@@ -337,6 +467,14 @@ class RemoteConnectionService : Service() {
                 Log.w(TAG, "Service: receiver was not registered", e)
             }
             receiverRegistered = false
+        }
+        if (helmetReceiverRegistered) {
+            try {
+                unregisterReceiver(helmetAclReceiver)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Service: helmet receiver was not registered", e)
+            }
+            helmetReceiverRegistered = false
         }
         confirmationTimeoutJob = null
         scope.cancel()
