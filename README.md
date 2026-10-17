@@ -2,6 +2,11 @@
 
 Eine eigene Android-App für die Bluetooth-LE-Fernbedienung des Fahrradhelms CRATONI SMARTRIDE 1.2. Sie ersetzt die Hersteller-App für den laufenden Betrieb: Die App verbindet sich selbst mit der Fernbedienung und setzt deren Tasten systemweit um, auch bei geschlossener Oberfläche und gesperrtem Bildschirm. Die Tasten steuern Medienwiedergabe, Anrufe, Lautstärke und den Sprachassistenten; zusätzlich schalten sie Blinker und Rücklicht am Helm.
 
+> [!WARNING]
+> **Keine Sturzerkennung, kein Notruf.** Der Helm bietet zusammen mit der Hersteller-App eine Unfall- bzw. Sturzerkennung, die im Ernstfall eine SMS an hinterlegte Kontakte sendet. **Diese App unterstützt das nicht.** Sie wertet keine Sturzmeldung aus, sendet keine SMS und setzt keinen Notruf ab.
+>
+> Das ist kein rein theoretischer Unterschied: Die Fernbedienung nimmt nur **eine** Bluetooth-Verbindung auf einmal an. Solange diese App verbunden ist, kann die Hersteller-App die Fernbedienung nicht nutzen. Wer sich auf die Sturzerkennung verlässt, sollte diese App deshalb **nicht** anstelle der Hersteller-App einsetzen.
+
 ## Haftung und Unabhängigkeit
 
 Dies ist ein privates, unabhängiges Projekt. Es besteht keine Verbindung zum Hersteller des Helms, und der Hersteller hat das Projekt weder beauftragt noch geprüft oder freigegeben. Produkt- und Markennamen dienen ausschließlich dazu, das Gerät zu bezeichnen, mit dem die App zusammenarbeitet; sie gehören ihren jeweiligen Inhabern.
@@ -10,6 +15,14 @@ Dies ist ein privates, unabhängiges Projekt. Es besteht keine Verbindung zum He
 - **Straßenverkehr:** Die App kann Blinker und Rücklicht am Helm schalten. Die Lichtfunktion ist kein geprüftes Sicherheitssystem. Der Helm bestätigt keinen Schaltvorgang; die App führt den Lichtzustand selbst und kann nicht erkennen, ob ein Befehl angekommen ist oder ob das Licht tatsächlich leuchtet. Wer sich im Straßenverkehr darauf verlässt, tut das auf eigene Verantwortung. Im Zweifel Handzeichen geben und die Beleuchtung am Helm prüfen.
 - Die Kommunikation mit Fernbedienung und Helm wurde durch Beobachtung des eigenen Geräts ermittelt (Interoperabilität), nicht aus Herstellerunterlagen. Es wurde keine Firmware verändert. Die App schreibt weder auf den Firmware-Update-Kanal (OTA) der Fernbedienung noch auf deren übrige Schreib-Characteristics. Zum Helm sendet sie ausschließlich die beobachteten Lichtbefehle.
 - Während die App mit der Fernbedienung verbunden ist, kann die Hersteller-App sie nicht gleichzeitig nutzen: Die Fernbedienung nimmt nur eine Verbindung auf einmal an.
+
+## Bildschirme
+
+| Verbunden | Nicht eingerichtet | Bestätigung beim Einrichten |
+|---|---|---|
+| ![Statuskarte mit Verbindung, Akkustand, Helm und letztem Befehl](docs/screenshots/verbunden.png) | ![Statuskarte ohne eingerichtete Fernbedienung, mit Knopf „Einrichten“](docs/screenshots/nicht-eingerichtet.png) | ![Karte „Remote bestätigen“ mit Gerätename, Restzeit und Abbrechen-Knopf](docs/screenshots/bestaetigung.png) |
+
+Der Gerätename im dritten Bild ist ein Beispiel; er wurde für die Veröffentlichung ersetzt.
 
 ## Funktionsumfang
 
@@ -133,6 +146,7 @@ Kurzüberblick; Protokolle, Messungen und Entscheidungen stehen in [`docs/archit
 
 ## Bekannte Grenzen und offene Punkte
 
+- **Sturzerkennung und Notfall-SMS fehlen** (siehe Warnung oben). Die Unfall- bzw. Sturzerkennung des Helms, die über die Hersteller-App eine SMS an hinterlegte Kontakte auslöst, wird von dieser App nicht unterstützt. Ob und wie der Helm ein Sturzereignis über die hier genutzten Kanäle überhaupt meldet, wurde nie untersucht. Eine spätere Unterstützung ist nicht ausgeschlossen, setzt aber voraus, dass sich das Ereignis zuverlässig erkennen lässt — eine Notruffunktion, die im Ernstfall nicht auslöst, wäre schlimmer als keine.
 - **WhatsApp-Anrufe:** Die Anruf-Taste reagiert nicht. WhatsApp setzt den Audio-Modus schon beim Klingeln auf Kommunikation; die App erkennt darin einen laufenden Anruf, kann ihn aber nicht beenden und tut deshalb nichts. Die Lautstärketasten wirken im Gespräch dagegen.
 - **Anklopfen:** Klingelt während eines Gesprächs ein zweiter Anruf, beendet die Anruf-Taste das laufende Gespräch, statt den zweiten anzunehmen.
 - **Verlorene Tastenpakete bei Telefonaten:** Während eines Telefonats kommen einzelne Tastendrücke nicht an. Die betreffenden Pakete wurden nie empfangen. Vermutet wird eine Funk-Koexistenz zwischen Sprachverbindung und BLE-Verbindung; die Ursache ist nicht belegt und die Verlustrate nicht gemessen.
