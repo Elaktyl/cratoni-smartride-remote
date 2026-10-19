@@ -75,9 +75,9 @@ Zum Bauen: Alle Angaben aus `app/build.gradle.kts` und `gradle/libs.versions.tom
 
 ## Bauen und installieren
 
-Fertige Fassung: Unter „Releases“ des GitHub-Repositories liegt eine signierte Fassung (v1.0.0). Alternativ lässt sich die App selbst bauen (siehe unten). Wer selbst baut und signiert, erzeugt eine andere Signatur; eine Fassung aus „Releases“ lässt sich dann nicht darüber aktualisieren und umgekehrt.
+Fertige Fassung: Unter „Releases“ des GitHub-Repositories liegt eine signierte Fassung (v1.1.0). Alternativ lässt sich die App selbst bauen (siehe unten). Wer selbst baut und signiert, erzeugt eine andere Signatur; eine Fassung aus „Releases“ lässt sich dann nicht darüber aktualisieren und umgekehrt.
 
-Die Fassung v1.0.0 ist älter als drei Funktionen, die in diesem Dokument beschrieben sind: Folgen der Systemsprache (v1.0.0 ist ausschließlich deutsch), die übersetzbare Benachrichtigung und die Tastenlegende. Sie stecken nur in Builds aus dem aktuellen Quelltext.
+Was sich zwischen den Fassungen geändert hat, steht in [CHANGELOG.md](CHANGELOG.md) — einschließlich der Schritte vor der ersten Veröffentlichung. Das Änderungsprotokoll ist auf Englisch.
 
 Zielplattform: Entwicklungsrechner mit JDK 17 und Android SDK; Android 16 auf dem Gerät. Unter Windows (PowerShell) statt `./gradlew` den Aufruf `.\gradlew.bat` verwenden.
 

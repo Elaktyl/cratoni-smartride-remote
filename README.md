@@ -75,9 +75,9 @@ To build the app: all values are taken from `app/build.gradle.kts` and `gradle/l
 
 ## Building and installing
 
-Prebuilt version: a signed build (v1.0.0) is available under "Releases" in the GitHub repository. Alternatively, build the app yourself (see below). A build you sign yourself carries a different signature, so a version from "Releases" cannot be updated in place with it, and the other way round.
+Prebuilt version: a signed build (v1.1.0) is available under "Releases" in the GitHub repository. Alternatively, build the app yourself (see below). A build you sign yourself carries a different signature, so a version from "Releases" cannot be updated in place with it, and the other way round.
 
-The release v1.0.0 predates three features described in this document: following the system language (v1.0.0 is German only), the translatable notification, and the button legend. They are only in builds made from the current source.
+What changed between releases is listed in [CHANGELOG.md](CHANGELOG.md), including the steps before the first public one.
 
 Target platform: development machine with JDK 17 and the Android SDK; Android 16 on the device. On Windows (PowerShell), use `.\gradlew.bat` instead of `./gradlew`.
 
