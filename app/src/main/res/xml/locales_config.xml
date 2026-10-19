@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Languages the app ships, referenced from android:localeConfig in the manifest. Only with this list does
+     the app show up under Settings > Apps > CRATONI Remote > Language, where a single app can be set to a
+     language of its own (Android 13 and up; minSdk is 36, so it is always available).
+
+     Hand written on purpose instead of androidResources.generateLocaleConfig: two languages are easier to read
+     here than in a generated file, the list is visible in review and in the diff, and generating it would need
+     res/resources.properties to declare the language of the unqualified values/ folder on top of that.
+
+     android:defaultLocale names the language of res/values/ (API 35 and up), so the system can mark it as
+     "System default" instead of guessing. -->
+<locale-config
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:defaultLocale="en">
+    <locale android:name="en" />
+    <locale android:name="de" />
+</locale-config>

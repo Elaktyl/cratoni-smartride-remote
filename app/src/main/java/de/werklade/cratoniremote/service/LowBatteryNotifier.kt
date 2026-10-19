@@ -53,7 +53,15 @@ class LowBatteryNotifier(context: Context) {
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    /** Audible warning channel, separate from the silent channel of the running connection. */
+    /**
+     * Audible warning channel, separate from the silent channel of the running connection.
+     *
+     * Called again on every language change (`RemoteConnectionService.refreshLocalisedText`), like the channel
+     * of the connection: name and description come from string resources and stand in the system settings.
+     * Creating a channel that exists only updates those (see
+     * `RemoteConnectionService.createNotificationChannel` for the documented contract); what the user set on
+     * the channel is kept.
+     */
     fun createChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
@@ -112,7 +120,13 @@ class LowBatteryNotifier(context: Context) {
             Log.w(TAG, "Battery warning for $level % not shown: no NotificationManager")
             return false
         }
-        val text = appContext.getString(R.string.low_battery_text, RemoteStatusText.batteryValue(battery))
+        // The measurement is formatted for the language the resources around it were resolved with, not for
+        // Locale.getDefault() — the same rule the service notification follows ([remoteNotificationText]), so
+        // "Akku bei 20 %" can never end up with an English number next to German words.
+        val text = appContext.getString(
+            R.string.low_battery_text,
+            RemoteStatusText.batteryValue(battery, appContext.resources.configuration.locales[0]),
+        )
         Log.i(TAG, "Battery warning at threshold $level %: '$text'")
         manager.notify(NOTIFICATION_ID, build(text))
         return true

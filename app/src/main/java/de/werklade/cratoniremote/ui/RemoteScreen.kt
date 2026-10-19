@@ -2,10 +2,12 @@ package de.werklade.cratoniremote.ui
 
 import android.Manifest
 import android.content.res.Configuration
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -27,6 +29,7 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +64,8 @@ import de.werklade.cratoniremote.data.LastCommand
 import de.werklade.cratoniremote.data.PendingConfirmation
 import de.werklade.cratoniremote.data.RemoteState
 import de.werklade.cratoniremote.data.RemoteStatusText
+import de.werklade.cratoniremote.data.StatusText
+import de.werklade.cratoniremote.data.TextSpec
 import de.werklade.cratoniremote.helmet.HelmetConnectionState
 import de.werklade.cratoniremote.helmet.HelmetFailure
 import de.werklade.cratoniremote.helmet.HelmetLights
@@ -75,10 +80,14 @@ import de.werklade.cratoniremote.protocol.RemoteCommand
  *
  * Stateless regarding the domain: everything shown is derived from [remoteState] and the flags below; the only
  * local state is the transient visibility of the "forget" confirmation dialog. Every visible text is a string
- * resource; [RemoteStatusText] is intentionally not reused here (it is the wording of the foreground-service
- * notification, not localised resources) except for the formatting helpers [RemoteStatusText.timestamp],
- * [RemoteStatusText.showsDate], [RemoteStatusText.shortTimestamp] and [RemoteStatusText.batteryValue] — the last one
- * because its locale-fixed number format is only worth having in one unit tested place.
+ * resource. Which resource says what about the remote is not decided here but in
+ * [de.werklade.cratoniremote.data.StatusText], the same decision the foreground-service notification follows
+ * ([de.werklade.cratoniremote.service.NotificationText]); this file only looks the resources up ([statusText]).
+ * The values inside them come from the formatting helpers [RemoteStatusText.timestamp],
+ * [RemoteStatusText.showsDate], [RemoteStatusText.shortTimestamp] and [RemoteStatusText.batteryValue] — numbers
+ * and times, no wording, and worth unit testing in one place. Called without a locale they format for
+ * `Locale.getDefault()`, which the framework sets to the language the app runs in; a change of that language
+ * recreates the activity, so there is nothing to observe here.
  *
  * @param missingPermissionNames not yet granted runtime permissions as returned by the framework (e.g.
  *   `android.permission.BLUETOOTH_CONNECT`), empty if all are granted; [permissionLabel] turns them into words
@@ -195,6 +204,15 @@ fun RemoteScreen(
             showLocationHint = showLocationHint,
             showChooseRemoteHint = !remoteConfigured && pendingConfirmation == null,
         )
+
+        // Last on purpose: it is long, and in front of it the setup button and the hints (which explain the
+        // setup dialog) would sit below the fold exactly when a new user needs them. Shown whether or not a
+        // remote is set up — it matters most before. Not while confirming: the press asked for then is only
+        // displayed, nothing is executed (DispatchGate), so "Play/Pause starts playback" would contradict
+        // "press any button", and nothing above moves when the card goes away.
+        if (pendingConfirmation == null) {
+            ButtonLegendCard()
+        }
     }
 
     if (showForgetConfirmation) {
@@ -431,13 +449,14 @@ private fun statusContainerColor(remoteConfigured: Boolean, state: RemoteState):
  * sleep. From half a day on ([RemoteStatusText.shortTimestamp]) the caption therefore carries the date as well,
  * like [LastCommandRow]. "Now" is read at composition, the same reasoning as there.
  *
- * The value text comes from [RemoteStatusText.batteryValue] instead of a string resource, see there.
+ * The measured value comes from [RemoteStatusText.batteryValue] instead of a string resource, see there; the
+ * case without a measurement is the one part of it that is wording, so it comes from the resources.
  */
 @Composable
 private fun BatteryRow(battery: RemoteBattery?, modifier: Modifier = Modifier) {
     StatusRow(
         label = stringResource(R.string.label_battery),
-        value = RemoteStatusText.batteryValue(battery),
+        value = battery?.let { RemoteStatusText.batteryValue(it) } ?: stringResource(R.string.battery_unknown),
         modifier = modifier,
         caption = battery?.let {
             val now = System.currentTimeMillis()
@@ -624,6 +643,104 @@ private fun HintsSection(
 }
 
 /**
+ * What the buttons of the remote do: static, always the same seven lines, independent of any state.
+ *
+ * Neutral container like the idle status card — the legend is reference text and carries no state. Each entry is
+ * one merged semantics node, so a screen reader reads the button together with its description.
+ *
+ * Short and long press are decided by the remote, which sends a different packet for each (see
+ * docs/anforderungen.md, "SHORT/LONG PRESS"); the legend therefore only describes what happens, it is no
+ * setting. The two presses are set apart by the bold, translated word in front of them, not by colour.
+ */
+@Composable
+private fun ButtonLegendCard(modifier: Modifier = Modifier) {
+    val containerColor = MaterialTheme.colorScheme.surfaceVariant
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColorFor(containerColor)),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.legend_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.semantics { heading() },
+            )
+            LegendEntry(name = stringResource(R.string.legend_key_play_pause)) {
+                Text(text = stringResource(R.string.legend_play_pause), style = MaterialTheme.typography.bodyMedium)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_volume_up)) {
+                LegendPress(R.string.legend_press_short, R.string.legend_volume_up_short)
+                LegendPress(R.string.legend_press_long, R.string.legend_volume_up_long)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_volume_down)) {
+                LegendPress(R.string.legend_press_short, R.string.legend_volume_down_short)
+                LegendPress(R.string.legend_press_long, R.string.legend_volume_down_long)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_call)) {
+                Text(text = stringResource(R.string.legend_call), style = MaterialTheme.typography.bodyMedium)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_walkie_talkie)) {
+                Text(text = stringResource(R.string.legend_walkie_talkie), style = MaterialTheme.typography.bodyMedium)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_turn_signals)) {
+                Text(text = stringResource(R.string.legend_turn_signals), style = MaterialTheme.typography.bodyMedium)
+            }
+            LegendEntry(name = stringResource(R.string.legend_key_rear_light)) {
+                Text(text = stringResource(R.string.legend_rear_light), style = MaterialTheme.typography.bodyMedium)
+            }
+            // The real limits of the four buttons that do not simply work, in the order of the entries above.
+            // They are footnotes and not part of an entry: each of them is a case, not what the button does.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(text = stringResource(R.string.legend_note_lights), style = MaterialTheme.typography.bodySmall)
+                Text(text = stringResource(R.string.legend_note_call), style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = stringResource(R.string.legend_note_call_waiting),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    text = stringResource(R.string.legend_note_walkie_talkie),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+/** One button of the legend: its name, emphasised in the type of a [StatusRow] value, and the description below. */
+@Composable
+private fun LegendEntry(
+    name: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier.semantics(mergeDescendants = true) {},
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(text = name, style = MaterialTheme.typography.titleMedium)
+        content()
+    }
+}
+
+/** One line "Short: louder": the press in bold, the effect in regular weight; wraps like any text. */
+@Composable
+private fun LegendPress(@StringRes pressRes: Int, @StringRes effectRes: Int) {
+    val press = stringResource(pressRes)
+    val effect = stringResource(effectRes)
+    val text = remember(press, effect) {
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(press) }
+            append(" ")
+            append(effect)
+        }
+    }
+    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+}
+
+/**
  * State of the SPP connection to the helmet (docs/architektur.md §13).
  *
  * [HelmetConnectionState.NotFound] gets its own wording: no paired helmet whose name starts with
@@ -675,54 +792,33 @@ private fun lightsText(lights: HelmetLights): String {
 }
 
 /**
- * Same distinction as [RemoteStatusText.remoteLine], here from string resources: with a remote set up but no
- * running service the system has simply not reported it as present yet. "Getrennt" would read like a fault the
- * user has to fix, while nothing is wrong and the connection comes back by itself.
+ * Looks a [TextSpec] up, and every spec among its arguments first — `remote_status_error` carries a `failure_*`
+ * text, which in turn can carry a `gatt_step_*` text.
+ *
+ * `stringResource` and not `Resources.getString`, so a language change makes the line recompose; the case
+ * without arguments separately, because the vararg form runs `String.format` over the result, which would
+ * stumble over a per cent sign in a translation that has no placeholder at all.
+ *
+ * [ReadOnlyComposable] because it only reads (`stringResource` is read-only itself and this emits nothing),
+ * which saves the composer the group it would otherwise open around every single status line.
  */
 @Composable
-private fun remoteStatusText(remoteConfigured: Boolean, state: RemoteState): String = when {
-    !remoteConfigured -> stringResource(R.string.remote_status_not_configured)
-    state.pendingConfirmation != null -> stringResource(R.string.remote_status_confirming)
-    state.waitingForBluetooth -> stringResource(R.string.remote_status_waiting_for_bluetooth)
-    !state.serviceRunning && state.connection == BleConnectionState.Disconnected ->
-        stringResource(R.string.remote_status_out_of_range)
-    else -> connectionStateText(state.connection)
+@ReadOnlyComposable
+private fun statusText(spec: TextSpec): String {
+    if (spec.args.isEmpty()) return stringResource(spec.id)
+    val args = buildList { spec.args.forEach { add(if (it is TextSpec) statusText(it) else it) } }
+    return stringResource(spec.id, *args.toTypedArray())
 }
 
+/**
+ * The state of the remote in one line, decided in [StatusText.remoteLine] and therefore identical to what the
+ * foreground service notification says: with a remote set up but no running service the system has simply not
+ * reported it as present yet. "Getrennt" would read like a fault the user has to fix, while nothing is wrong
+ * and the connection comes back by itself.
+ */
 @Composable
-private fun connectionStateText(connection: BleConnectionState): String = when (connection) {
-    BleConnectionState.Disconnected -> stringResource(R.string.remote_status_disconnected)
-    BleConnectionState.Connecting -> stringResource(R.string.remote_status_connecting)
-    BleConnectionState.DiscoveringServices -> stringResource(R.string.remote_status_discovering)
-    BleConnectionState.EnablingNotifications -> stringResource(R.string.remote_status_enabling_notifications)
-    BleConnectionState.Connected -> stringResource(R.string.remote_status_connected)
-    is BleConnectionState.Reconnecting -> stringResource(
-        R.string.remote_status_reconnecting,
-        connection.attempt,
-        connection.maxAttempts,
-        (connection.delayMs / 1000).toInt(),
-    )
-    is BleConnectionState.Failed -> stringResource(R.string.remote_status_error, failureReasonText(connection.reason))
-}
-
-@Composable
-private fun failureReasonText(reason: FailureReason): String = when (reason) {
-    FailureReason.BluetoothAdapterMissing -> stringResource(R.string.failure_bluetooth_adapter_missing)
-    FailureReason.BluetoothDisabled -> stringResource(R.string.failure_bluetooth_disabled)
-    FailureReason.MissingPermission -> stringResource(R.string.failure_missing_permission)
-    is FailureReason.GattError -> stringResource(R.string.failure_gatt_error, gattStepText(reason.step))
-    is FailureReason.ConnectionLost -> stringResource(R.string.failure_connection_lost)
-    is FailureReason.OperationNotStarted -> stringResource(R.string.failure_operation_not_started, gattStepText(reason.step))
-    is FailureReason.Timeout -> stringResource(R.string.failure_timeout, gattStepText(reason.step))
-    is FailureReason.DeviceUnsuitable -> stringResource(R.string.failure_device_unsuitable, reason.missing)
-}
-
-@Composable
-private fun gattStepText(step: GattStep): String = when (step) {
-    GattStep.CONNECT -> stringResource(R.string.gatt_step_connect)
-    GattStep.DISCOVER_SERVICES -> stringResource(R.string.gatt_step_discover_services)
-    GattStep.ENABLE_NOTIFICATIONS -> stringResource(R.string.gatt_step_enable_notifications)
-}
+private fun remoteStatusText(remoteConfigured: Boolean, state: RemoteState): String =
+    statusText(StatusText.remoteLine(remoteConfigured, state))
 
 /**
  * The one place that turns a permission name into words the user recognises from the system dialogs.
@@ -738,20 +834,9 @@ private fun permissionLabel(permission: String): String = when (permission) {
     else -> permission.substringAfterLast('.')
 }
 
+/** What the button did, in the same words the notification uses ([StatusText.command]). */
 @Composable
-private fun commandText(command: RemoteCommand): String = when (command) {
-    RemoteCommand.PLAY_PAUSE -> stringResource(R.string.command_play_pause)
-    RemoteCommand.NEXT -> stringResource(R.string.command_next)
-    RemoteCommand.PREVIOUS -> stringResource(R.string.command_previous)
-    RemoteCommand.VOLUME_UP -> stringResource(R.string.command_volume_up)
-    RemoteCommand.VOLUME_DOWN -> stringResource(R.string.command_volume_down)
-    RemoteCommand.CALL -> stringResource(R.string.command_call)
-    RemoteCommand.WALKIE_TALKIE -> stringResource(R.string.command_walkie_talkie)
-    RemoteCommand.TURN_LEFT -> stringResource(R.string.command_turn_left)
-    RemoteCommand.TURN_RIGHT -> stringResource(R.string.command_turn_right)
-    RemoteCommand.REAR_LIGHT -> stringResource(R.string.command_rear_light)
-    RemoteCommand.UNKNOWN -> stringResource(R.string.command_unknown)
-}
+private fun commandText(command: RemoteCommand): String = statusText(StatusText.command(command))
 
 // ---- Previews: the four states that matter most, light and dark (docs/architektur.md §10, step 6) ----
 
@@ -917,3 +1002,32 @@ private fun PreviewAssistantPendingLight() =
 @Composable
 private fun PreviewAssistantPendingDark() =
     PreviewScreen(remoteConfigured = true, state = PREVIEW_CONNECTED, assistantTarget = null)
+
+// The button legend on its own; in the screen previews above it sits below the fold.
+
+@Composable
+private fun PreviewLegend() {
+    val colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
+    MaterialTheme(colorScheme = colorScheme) {
+        Column(modifier = Modifier.padding(16.dp)) { ButtonLegendCard() }
+    }
+}
+
+@Preview(name = "Tastenlegende – hell", showBackground = true)
+@Composable
+private fun PreviewButtonLegendLight() = PreviewLegend()
+
+@Preview(name = "Tastenlegende – dunkel", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewButtonLegendDark() = PreviewLegend()
+
+// Narrow screen, largest system font, German (the longer wording): nothing may be cut off.
+@Preview(
+    name = "Tastenlegende – große Schrift, schmal, deutsch",
+    showBackground = true,
+    widthDp = 320,
+    fontScale = 2f,
+    locale = "de",
+)
+@Composable
+private fun PreviewButtonLegendLargeFont() = PreviewLegend()

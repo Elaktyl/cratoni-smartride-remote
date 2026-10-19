@@ -21,9 +21,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import de.werklade.cratoniremote.R
 import de.werklade.cratoniremote.ble.RemoteBattery
 import de.werklade.cratoniremote.data.RemoteStatusText
 
@@ -138,7 +140,13 @@ private fun GaugePreview(battery: RemoteBattery?) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 BatteryGauge(percent = battery?.percent)
-                Text(text = RemoteStatusText.batteryValue(battery), style = MaterialTheme.typography.titleMedium)
+                // Same split as BatteryRow on the screen: the measured value is formatted, the case without a
+                // measurement is wording and comes from the resources.
+                Text(
+                    text = battery?.let { RemoteStatusText.batteryValue(it) }
+                        ?: stringResource(R.string.battery_unknown),
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
         }
     }

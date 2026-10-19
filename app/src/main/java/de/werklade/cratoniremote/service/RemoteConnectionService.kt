@@ -15,6 +15,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.os.IBinder
 import android.os.SystemClock
@@ -36,7 +37,6 @@ import de.werklade.cratoniremote.companion.CompanionSetup
 import de.werklade.cratoniremote.companion.ConfirmedRemoteStore
 import de.werklade.cratoniremote.data.ConfirmationOutcome
 import de.werklade.cratoniremote.data.RemoteStatus
-import de.werklade.cratoniremote.data.RemoteStatusText
 import de.werklade.cratoniremote.helmet.HelmetConnectionState
 import de.werklade.cratoniremote.helmet.HelmetSppClient
 import de.werklade.cratoniremote.protocol.CratoniProtocolParser
@@ -50,6 +50,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -112,7 +113,7 @@ import kotlinx.coroutines.launch
  * connection attempt either; the service goes into the same waiting state instead of failing.
  *
  * That waiting is deliberately unbounded: there is no timeout after which the service gives up, so the
- * foreground notification ("Bluetooth ist aus, wartet auf Aktivierung") stays in the status bar for as long as
+ * foreground notification (`notification_waiting_for_bluetooth`) stays in the status bar for as long as
  * Bluetooth is off — even overnight. It is the price for the behaviour above; a service that stopped after n
  * minutes would take its receiver with it and, without a new presence event, never come back on its own. The
  * only ways out of the waiting state are Bluetooth coming back (the service connects again), the remote being
@@ -221,6 +222,9 @@ class RemoteConnectionService : Service() {
     /** Own flag for [helmetAclReceiver], like [receiverRegistered] for [bluetoothReceiver]. */
     private var helmetReceiverRegistered = false
 
+    /** Own flag for [localeReceiver], like [receiverRegistered] for [bluetoothReceiver]. */
+    private var localeReceiverRegistered = false
+
     /**
      * Association of the remote this service is running for, from the last presence event;
      * [NO_ASSOCIATION_ID] means "the only association" (see [CompanionSetup.remoteDevice]). Kept so the service
@@ -256,6 +260,35 @@ class RemoteConnectionService : Service() {
      * `startId` of the last [onStartCommand], [NO_START_ID] before the first one. See [stopSelfSafely].
      */
     private var lastStartId: Int = NO_START_ID
+
+    /**
+     * The line of the notification as it was last handed to the system, `null` before the first one.
+     *
+     * Everything that posts goes through [postNotification] and compares against this, so the two paths —
+     * the state flow and the language refresh — cannot undo each other, and a configuration change that is
+     * not a language change costs nothing. It is the same rule as the `distinctUntilChanged()` in
+     * [observeStatusForNotification], only in one place for both.
+     */
+    private var lastPostedText: String? = null
+
+    /**
+     * Guards [lastPostedText] *together with* the `notify` that follows it: the flow collector runs on
+     * [Dispatchers.Default] and the language refresh on the main thread, and without that bracket the older
+     * of two lines could reach the system last. `notify` is a short binder call and the two paths practically
+     * never meet, so the lock costs nothing measurable.
+     */
+    private val notificationLock = Any()
+
+    /**
+     * The language the notification channels and the notification line were last built in, `null` until
+     * [refreshLocalisedText] ran the first time. Only read and written on the main thread (service creation,
+     * [onConfigurationChanged], [localeReceiver]).
+     *
+     * It is what tells a language change apart from every other configuration change, and the log prints it
+     * as "old -> new", so a device test can see at a glance whether the trigger arrived *and* whether the
+     * resources behind it had already been switched over.
+     */
+    private var renderedLocale: Locale? = null
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -364,6 +397,50 @@ class RemoteConnectionService : Service() {
     }
 
     /**
+     * Notices a language change, as the second trigger next to [onConfigurationChanged]. Runtime-registered
+     * like the two receivers above ([Intent.ACTION_LOCALE_CHANGED] is a protected system broadcast and may
+     * not be declared in the manifest since Android 8).
+     *
+     * ## Why two triggers
+     *
+     * Device test 19.10.2026 (S25 Ultra, Android 16/One UI 8.5): switching the *system* language turned the
+     * screen English at once, while the permanently visible notification stayed German until the user swiped
+     * it away and a state change posted it again — the [onConfigurationChanged] path did not do its job.
+     *
+     * Read in the platform sources (API 37, `ActivityThread`/`ConfigurationController`) it should have:
+     * `collectComponentCallbacks(includeUiContexts = false)` deliberately keeps every plain [Service] (only a
+     * `WindowProviderService` is left out), `android:configChanges` is an activity attribute and means nothing
+     * for a service, and `ResourcesManager.applyConfigurationToResources` runs *before* the callbacks, so the
+     * resources are already switched over when one arrives. But `handleConfigurationChangedInner` has two
+     * gates in front of the callbacks — a configuration whose sequence number is not newer than the one the
+     * process already has, and a configuration that differs from it in no public field, are both dropped after
+     * the resources were updated — and there are several paths that consume the pending configuration (an
+     * activity being relaunched for the very same language change is one of them). Which of those swallowed
+     * the callback cannot be read off the sources, only off a device.
+     *
+     * So this receiver is not a workaround for a wrong diagnosis but the trigger that does not depend on that
+     * dispatch at all: [Intent.ACTION_LOCALE_CHANGED] is the documented signal for "the language changed", it
+     * is sent to every running process, and it cannot be lost in a sequence-number comparison.
+     * [onConfigurationChanged] stays, because the broadcast does *not* cover the other direction: a per-app
+     * language picked in the system settings (the app offers one, `android:localeConfig`) changes the
+     * configuration of this app alone and sends no `ACTION_LOCALE_CHANGED`. Both end in
+     * [refreshLocalisedText], which is idempotent, so whichever comes first — or both — is fine.
+     *
+     * Nothing is read from the intent; the new language comes from this service's own resources. A forged
+     * broadcast could therefore do no more than make the service fetch its own texts again, which is why
+     * [Context.RECEIVER_EXPORTED] is acceptable here. It is also the flag that is *proven* to work on the
+     * test device: with [Context.RECEIVER_NOT_EXPORTED] the protected ACL broadcasts above never arrived
+     * (measured 17.10.2026), and this trigger exists precisely because the documented path already failed
+     * once. If the device test shows the broadcast arriving, the flag can be tightened.
+     */
+    private val localeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_LOCALE_CHANGED) return
+            refreshLocalisedText("ACTION_LOCALE_CHANGED")
+        }
+    }
+
+    /**
      * The device of an ACL broadcast, or `null` if there is nothing usable to decide on — then the event is
      * dropped silently, like everywhere else in this app when `BLUETOOTH_CONNECT` is missing.
      *
@@ -393,8 +470,9 @@ class RemoteConnectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "Service: created")
-        createNotificationChannel()
-        lowBatteryNotifier.createChannel()
+        // Creates both notification channels and remembers the language they were created in; nothing is
+        // posted yet, the service is not in the foreground at this point.
+        refreshLocalisedText("service created")
         registerReceiver(
             bluetoothReceiver,
             IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
@@ -413,6 +491,14 @@ class RemoteConnectionService : Service() {
             Context.RECEIVER_EXPORTED,
         )
         helmetReceiverRegistered = true
+        // See [localeReceiver] for why this trigger exists next to onConfigurationChanged and why it is
+        // registered exported.
+        registerReceiver(
+            localeReceiver,
+            IntentFilter(Intent.ACTION_LOCALE_CHANGED),
+            Context.RECEIVER_EXPORTED,
+        )
+        localeReceiverRegistered = true
         observeHelmet()
         // Opens the pairing preferences file off the main thread, so the first "is this the confirmed remote?"
         // in [connectToRemote] is less likely to wait for the disk. Nobody waits for this, so it is no
@@ -476,6 +562,14 @@ class RemoteConnectionService : Service() {
             }
             helmetReceiverRegistered = false
         }
+        if (localeReceiverRegistered) {
+            try {
+                unregisterReceiver(localeReceiver)
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Service: locale receiver was not registered", e)
+            }
+            localeReceiverRegistered = false
+        }
         confirmationTimeoutJob = null
         scope.cancel()
         bleManager?.close()
@@ -489,6 +583,79 @@ class RemoteConnectionService : Service() {
 
     /** Not a bound service. */
     override fun onBind(intent: Intent): IBinder? = null
+
+    /**
+     * One of the two triggers for a language change (see [localeReceiver] for the other one and for why there
+     * are two). Everything else a configuration change can be — a rotation, the dark mode, a new font size —
+     * arrives here as well and is dropped: the language in [newConfig] is then the one the texts were already
+     * built in, and nothing in this service depends on anything else in that configuration.
+     *
+     * Dropping it is what keeps a rotation from rebuilding and re-posting the notification and from writing a
+     * log line about it. The second guard is in [postNotification], which drops an unchanged line in any case.
+     *
+     * The language of [newConfig] is logged in the trigger, while [refreshLocalisedText] logs the language it
+     * actually *rendered* in (from its own resources). If those two ever disagree, the log says so — that is
+     * the difference between "the trigger never came" and "it came before the resources were switched over".
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val locale = newConfig.locales[0]
+        if (locale == renderedLocale) {
+            Log.d(TAG, "Service: configuration changed, language is still $locale, nothing to fetch again")
+            return
+        }
+        refreshLocalisedText("configuration change to $locale")
+    }
+
+    /**
+     * Fetches everything the user reads in words again: the names and descriptions of the two notification
+     * channels and the single line of the foreground notification.
+     *
+     * Called when the service is created and from both language triggers. Doing it twice is free, which is
+     * what allows the two triggers to overlap: creating a channel that exists only hands over name,
+     * description and group (see [createNotificationChannel]), and [postNotification] drops a line that did
+     * not change.
+     *
+     * The channels are refreshed even while the service is not in the foreground yet — they are visible in
+     * the system settings whether a notification stands or not.
+     *
+     * @param trigger what caused this, for the log; it carries the language of the trigger where there is one
+     */
+    private fun refreshLocalisedText(trigger: String) {
+        val locale = resources.configuration.locales[0]
+        val previous = renderedLocale
+        renderedLocale = locale
+        createNotificationChannel()
+        lowBatteryNotifier.createChannel()
+        val text = if (startedForeground) remoteNotificationText(RemoteStatus.state.value) else null
+        Log.i(
+            TAG,
+            "Service: texts fetched again ($trigger): language $previous -> $locale, both channels updated, " +
+                (text?.let { "notification line '$it'" } ?: "no notification yet (not in the foreground)"),
+        )
+        if (text != null) postNotification(text, trigger)
+    }
+
+    /**
+     * Hands [text] to the system, unless that very line is already standing there.
+     *
+     * The one place both paths post through — the state flow and [refreshLocalisedText] — so a language
+     * change and a state change cannot overtake each other and nothing is posted twice (see
+     * [lastPostedText], [notificationLock]).
+     *
+     * @param reason what led to this line, for the log
+     */
+    private fun postNotification(text: String, reason: String) {
+        synchronized(notificationLock) {
+            if (text == lastPostedText) {
+                Log.d(TAG, "Service: notification line unchanged, not posted again ($reason)")
+                return
+            }
+            lastPostedText = text
+            Log.d(TAG, "Service: notification text '$text' ($reason)")
+            notificationManager?.notify(NOTIFICATION_ID, buildNotification(text))
+        }
+    }
 
     /**
      * Connects to the remote of [associationId], or waits for Bluetooth if the adapter is off.
@@ -672,7 +839,7 @@ class RemoteConnectionService : Service() {
     }
 
     /**
-     * Stays up without a connection attempt and shows "Bluetooth ist aus, wartet auf Aktivierung" instead of an
+     * Stays up without a connection attempt and shows `notification_waiting_for_bluetooth` instead of an
      * error; the receiver connects again on `STATE_ON`. Only if the remote is not set up (any more) does the
      * service stop — then nothing will ever connect again and the notification would be pointless.
      *
@@ -854,12 +1021,9 @@ class RemoteConnectionService : Service() {
     private fun observeStatusForNotification() {
         scope.launch {
             RemoteStatus.state
-                .map { RemoteStatusText.notification(it) }
+                .map { remoteNotificationText(it) }
                 .distinctUntilChanged()
-                .collect { text ->
-                    Log.d(TAG, "Service: notification text '$text'")
-                    notificationManager?.notify(NOTIFICATION_ID, buildNotification(text))
-                }
+                .collect { text -> postNotification(text, "state change") }
         }
     }
 
@@ -872,10 +1036,14 @@ class RemoteConnectionService : Service() {
      * service instead of letting the system kill it.
      */
     private fun startForegroundSafely(): Boolean {
-        val notification = buildNotification(RemoteStatusText.notification(RemoteStatus.state.value))
+        val text = remoteNotificationText(RemoteStatus.state.value)
+        val notification = buildNotification(text)
         return try {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-            Log.i(TAG, "Service: foreground (connectedDevice)")
+            // This line is now standing, so the first emission of the flow — which carries the same state —
+            // must not post it a second time.
+            synchronized(notificationLock) { lastPostedText = text }
+            Log.i(TAG, "Service: foreground (connectedDevice), notification line '$text'")
             true
         } catch (e: SecurityException) {
             Log.e(TAG, "Service: startForeground refused, BLUETOOTH_CONNECT missing?", e)
@@ -886,7 +1054,18 @@ class RemoteConnectionService : Service() {
         }
     }
 
-    /** Low importance: the notification is required for the foreground service, it must not interrupt. */
+    /**
+     * Low importance: the notification is required for the foreground service, it must not interrupt.
+     *
+     * Called again on every language change ([refreshLocalisedText]), because name and description come from
+     * string resources and are visible in the system settings and under the notification. Creating a channel
+     * that already exists is the documented way to do exactly that — [NotificationManager.createNotificationChannel]:
+     * "This can also be used … to update an existing channel's name, description, group, and/or importance.
+     * The name and description should only be changed if the locale changes … All other fields are ignored
+     * for channels that already exist." The importance is only taken over when it is *lower* than the current
+     * one and the user has altered no setting on the channel; this call passes the same one every time, so a
+     * sound, a vibration or an importance the user chose is kept either way.
+     */
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,

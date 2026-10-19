@@ -1,164 +1,218 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">CRATONI Remote</string>
+<!-- Base version, English. Android falls back to values/ for every language without a folder of its own, so
+     this has to be the widest reachable language and not the author's; the German wording lives in
+     res/values-de/strings.xml. Both files carry the same keys in the same order (lint: MissingTranslation).
 
-    <!-- Foreground service notification (texts of the one-line status come from RemoteStatusText, not from here) -->
-    <string name="notification_channel_name">Remote-Verbindung</string>
-    <string name="notification_channel_description">Läuft, solange die Fernbedienung in Reichweite ist.</string>
+     Apostrophes and quotation marks are typographic on purpose (U+2018/U+2019, U+201C/U+201D): AAPT eats a
+     straight apostrophe unless it is escaped, and the escape is easy to lose in the next edit. -->
+<resources>
+    <!-- Brand name, the same in every language. -->
+    <string name="app_name" translatable="false">CRATONI Remote</string>
+
+    <!-- Foreground service notification. Its one visible line is assembled in service/NotificationText.kt out
+         of the remote_status_*, failure_*, gatt_step_* and command_* strings below - the same wording the
+         screen shows - plus the three strings that only the notification has. -->
+    <string name="notification_channel_name">Remote connection</string>
+    <string name="notification_channel_description">Runs as long as the remote is in range.</string>
+    <!-- Bluetooth is off and the service waits for it to come back: a statement, not an error. Says more than
+         remote_status_waiting_for_bluetooth on purpose - the notification stands alone in the status bar,
+         without the card around it that would explain the waiting. -->
+    <string name="notification_waiting_for_bluetooth">Bluetooth is off, waiting for it to be switched on</string>
+    <!-- %1$s is the measurement from RemoteStatusText.batteryValue, e.g. "80% (3.91 V)". -->
+    <string name="notification_battery">Battery: %1$s</string>
+    <!-- %1$s is one of the command_* strings, %2$s the time the command arrived, e.g. "12:34:56". -->
+    <string name="notification_last_command">Last command: %1$s (%2$s)</string>
 
     <!-- Low battery warning: own, audible channel (LowBatteryNotifier); the channel above stays silent. -->
-    <string name="low_battery_channel_name">Akkuwarnung</string>
-    <string name="low_battery_channel_description">Meldet einmalig, wenn der Akku der Fernbedienung 20 %, 10 % und 0 % erreicht.</string>
-    <string name="low_battery_title">Fernbedienung</string>
-    <!-- %1$s is the measurement from RemoteStatusText.batteryValue, e.g. "20 % (3,68 V)". -->
-    <string name="low_battery_text">Akku bei %1$s</string>
+    <string name="low_battery_channel_name">Battery warning</string>
+    <!-- formatted="false": the three per cent signs are text, not format specifiers, and the string is read
+         with getString() without arguments. Without the attribute AAPT reads them as substitutions. -->
+    <string name="low_battery_channel_description" formatted="false">Reports once when the battery of the remote reaches 20%, 10% and 0%.</string>
+    <string name="low_battery_title">Remote</string>
+    <!-- %1$s is the measurement from RemoteStatusText.batteryValue, e.g. "20% (3.68 V)". -->
+    <string name="low_battery_text">Battery at %1$s</string>
 
     <!-- Status card labels -->
     <string name="label_bluetooth_status">Bluetooth</string>
-    <string name="label_remote_status">Fernbedienung</string>
-    <string name="label_battery">Akkustand</string>
-    <string name="label_helmet">Helm</string>
-    <string name="label_lights">Licht</string>
+    <string name="label_remote_status">Remote</string>
+    <string name="label_battery">Battery level</string>
+    <string name="label_helmet">Helmet</string>
+    <string name="label_lights">Lights</string>
     <!-- Which app the system hands the walkie-talkie button over to. Deliberately not the wording of
-         command_walkie_talkie ("Sprachassistent"): the line sits directly above "Letzter Befehl", where that
-         would read as "Sprachassistent" twice in a row. -->
-    <string name="label_assistant">Zuständiger Assistent</string>
-    <string name="label_last_command">Letzter Befehl</string>
+         command_walkie_talkie ("Voice assistant"): the line sits directly above "Last command", where that
+         would read as "Voice assistant" twice in a row. -->
+    <string name="label_assistant">Assistant in charge</string>
+    <string name="label_last_command">Last command</string>
 
-    <string name="bluetooth_on">Aktiv</string>
-    <string name="bluetooth_off">Aus</string>
+    <string name="bluetooth_on">On</string>
+    <string name="bluetooth_off">Off</string>
 
     <!-- Remote connection state -->
-    <string name="remote_status_not_configured">Nicht eingerichtet</string>
+    <string name="remote_status_not_configured">Not set up</string>
     <!-- Set up, but the system has not reported the remote as present: the normal idle state, not an error.
-         Same wording as RemoteStatusText.OUT_OF_RANGE, which says it in the notification. -->
-    <string name="remote_status_out_of_range">Nicht in Reichweite – verbindet sich automatisch</string>
-    <string name="remote_status_disconnected">Getrennt</string>
-    <string name="remote_status_connecting">Verbindung wird aufgebaut</string>
-    <string name="remote_status_discovering">Dienste werden gesucht</string>
-    <string name="remote_status_enabling_notifications">Benachrichtigungen werden aktiviert</string>
-    <string name="remote_status_connected">Verbunden</string>
-    <string name="remote_status_waiting_for_bluetooth">Wartet auf Bluetooth</string>
+         Chosen in data/StatusText.remoteLine, which decides it for the screen and the notification alike, so
+         both say the same. -->
+    <string name="remote_status_out_of_range">Not in range – connects by itself</string>
+    <string name="remote_status_disconnected">Disconnected</string>
+    <string name="remote_status_connecting">Connecting</string>
+    <string name="remote_status_discovering">Looking for services</string>
+    <string name="remote_status_enabling_notifications">Enabling notifications</string>
+    <string name="remote_status_connected">Connected</string>
+    <string name="remote_status_waiting_for_bluetooth">Waiting for Bluetooth</string>
     <!-- A remote was chosen in the association dialog and the press confirming it is being waited for.
-         Same wording as RemoteStatusText.CONFIRMING, which says it in the notification. -->
-    <string name="remote_status_confirming">Tastendruck an der Remote wird erwartet</string>
-    <string name="remote_status_reconnecting">Neuer Versuch %1$d von %2$d in %3$d s</string>
-    <string name="remote_status_error">Fehler: %1$s</string>
+         Chosen in data/StatusText.remoteLine, like the state above, so the notification says the same. -->
+    <string name="remote_status_confirming">Waiting for a button press on the remote</string>
+    <string name="remote_status_reconnecting">Attempt %1$d of %2$d in %3$d s</string>
+    <string name="remote_status_error">Error: %1$s</string>
 
-    <!-- Helmet (classic Bluetooth/SPP, docs/architektur.md §13). "Nicht gefunden" means: no paired helmet whose
+    <!-- Helmet (classic Bluetooth/SPP, docs/architektur.md §13). "Not found" means: no paired helmet whose
          name starts with SMARTRIDE, or more than one. -->
-    <string name="helmet_status_disconnected">Nicht verbunden</string>
-    <string name="helmet_status_not_found">Nicht gefunden</string>
-    <string name="helmet_status_connecting">Verbindung wird aufgebaut</string>
-    <string name="helmet_status_connected">Verbunden</string>
-    <string name="helmet_status_error">Nicht verbunden (%1$s)</string>
-    <string name="helmet_failure_bluetooth_unavailable">Bluetooth ist aus</string>
-    <string name="helmet_failure_missing_permission">Berechtigung fehlt</string>
-    <string name="helmet_failure_connect">Helm nicht erreichbar</string>
-    <string name="helmet_failure_send">Übertragung abgebrochen</string>
+    <string name="helmet_status_disconnected">Not connected</string>
+    <string name="helmet_status_not_found">Not found</string>
+    <string name="helmet_status_connecting">Connecting</string>
+    <string name="helmet_status_connected">Connected</string>
+    <string name="helmet_status_error">Not connected (%1$s)</string>
+    <string name="helmet_failure_bluetooth_unavailable">Bluetooth is off</string>
+    <string name="helmet_failure_missing_permission">Permission missing</string>
+    <string name="helmet_failure_connect">Helmet unreachable</string>
+    <string name="helmet_failure_send">Transfer broke off</string>
 
     <!-- State of the helmet's three lights. What the app believes, not a measurement: the helmet confirms
          nothing. Several parts are joined with lights_separator. -->
-    <string name="lights_off">Aus</string>
+    <string name="lights_off">Off</string>
     <!-- xml:space, otherwise the trailing space of the separator is stripped at build time. -->
     <string name="lights_separator" xml:space="preserve">, </string>
-    <string name="light_turn_left_on">Blinker links an</string>
-    <string name="light_turn_right_on">Blinker rechts an</string>
-    <string name="light_rear_solid">Rücklicht leuchtet</string>
-    <string name="light_rear_blinking">Rücklicht blinkt</string>
+    <string name="light_turn_left_on">Left indicator on</string>
+    <string name="light_turn_right_on">Right indicator on</string>
+    <string name="light_rear_solid">Rear light on</string>
+    <string name="light_rear_blinking">Rear light flashing</string>
 
     <!-- Failure reasons, in understandable terms rather than status codes -->
-    <string name="failure_bluetooth_adapter_missing">Kein Bluetooth verfügbar</string>
-    <string name="failure_bluetooth_disabled">Bluetooth ist ausgeschaltet</string>
-    <string name="failure_missing_permission">Berechtigung fehlt</string>
-    <string name="failure_gatt_error">Verbindungsfehler beim %1$s</string>
-    <string name="failure_connection_lost">Verbindung verloren</string>
-    <string name="failure_operation_not_started">%1$s konnte nicht gestartet werden</string>
-    <string name="failure_timeout">Zeitüberschreitung beim %1$s</string>
-    <string name="failure_device_unsuitable">Gerät nicht passend (%1$s fehlt)</string>
+    <string name="failure_bluetooth_adapter_missing">No Bluetooth available</string>
+    <string name="failure_bluetooth_disabled">Bluetooth is switched off</string>
+    <string name="failure_missing_permission">Permission missing</string>
+    <string name="failure_gatt_error">Connection error while %1$s</string>
+    <string name="failure_connection_lost">Connection lost</string>
+    <string name="failure_operation_not_started">Could not start %1$s</string>
+    <string name="failure_timeout">Timeout while %1$s</string>
+    <string name="failure_device_unsuitable">Device does not fit (%1$s missing)</string>
 
-    <string name="gatt_step_connect">Verbinden</string>
-    <string name="gatt_step_discover_services">Suchen der Dienste</string>
-    <string name="gatt_step_enable_notifications">Aktivieren der Benachrichtigungen</string>
+    <!-- Named inside failure_gatt_error, failure_operation_not_started and failure_timeout, which is why these
+         are lower case gerunds: they always stand inside a sentence, never on their own. -->
+    <string name="gatt_step_connect">connecting</string>
+    <string name="gatt_step_discover_services">looking for services</string>
+    <string name="gatt_step_enable_notifications">enabling notifications</string>
 
-    <!-- Battery. The value itself ("60 % (3,74 V)", "Unbekannt") comes from RemoteStatusText.batteryValue,
-         which fixes the number format to German regardless of the device locale. -->
-    <string name="battery_measured_at">gemessen um %1$s</string>
+    <!-- Battery. The measured value itself ("60% (3.74 V)") comes from RemoteStatusText.batteryValue, which
+         formats percentage and voltage for the language the app runs in; only the case without a measurement
+         is wording and therefore lives here. -->
+    <string name="battery_unknown">Unknown</string>
+    <string name="battery_measured_at">measured at %1$s</string>
     <!-- Used instead of battery_measured_at once the measurement time carries a date (RemoteStatusText.showsDate):
          a connection can stand across midnight and the poll stands still in deep sleep. -->
-    <string name="battery_measured_at_date">gemessen am %1$s</string>
+    <string name="battery_measured_at_date">measured on %1$s</string>
 
     <!-- Assistant in charge of the walkie-talkie button. The value is normally the app's name as the system
          reports it; these three cover the cases in which there is no name to show. -->
-    <string name="assistant_none">Nicht festgelegt</string>
-    <string name="assistant_asked_on_press">Wird beim Drücken abgefragt</string>
-    <string name="assistant_pending">Wird ermittelt …</string>
-    <string name="action_assistant_settings">Einstellungen öffnen</string>
+    <string name="assistant_none">Not set</string>
+    <string name="assistant_asked_on_press">Asked for on each press</string>
+    <string name="assistant_pending">Being determined …</string>
+    <string name="action_assistant_settings">Open settings</string>
     <!-- Spoken instead of action_assistant_settings: the short visible text stands between seven status lines
          and says nothing about which settings it opens. -->
-    <string name="action_assistant_settings_description">Assistent-Einstellungen öffnen</string>
+    <string name="action_assistant_settings_description">Open assistant settings</string>
     <!-- Shown only if none of the system pages tried could be opened (see ui/AssistantTarget.kt). -->
-    <string name="assistant_settings_missing">Diese Systemseite gibt es auf diesem Gerät nicht.</string>
+    <string name="assistant_settings_missing">This system page does not exist on this device.</string>
 
     <!-- Last command -->
-    <string name="last_command_none">Noch kein Befehl empfangen</string>
-    <string name="last_command_time">um %1$s</string>
+    <string name="last_command_none">No command received yet</string>
+    <string name="last_command_time">at %1$s</string>
     <!-- Used instead of last_command_time once the timestamp carries a date (RemoteStatusText.showsDate). -->
-    <string name="last_command_date_time">am %1$s</string>
-    <string name="last_command_display_only_note">Löst in dieser Version keine Aktion aus, wird nur angezeigt</string>
+    <string name="last_command_date_time">on %1$s</string>
+    <string name="last_command_display_only_note">Triggers no action in this version, it is only shown</string>
 
     <string name="command_play_pause">Play/Pause</string>
-    <string name="command_next">Nächster Titel</string>
-    <string name="command_previous">Vorheriger Titel</string>
-    <string name="command_volume_up">Lauter</string>
-    <string name="command_volume_down">Leiser</string>
-    <string name="command_call">Anruf</string>
-    <string name="command_walkie_talkie">Sprachassistent</string>
-    <string name="command_turn_left">Blinker links</string>
-    <string name="command_turn_right">Blinker rechts</string>
-    <string name="command_rear_light">Rücklicht</string>
-    <string name="command_unknown">Unbekannt</string>
+    <string name="command_next">Next track</string>
+    <string name="command_previous">Previous track</string>
+    <string name="command_volume_up">Volume up</string>
+    <string name="command_volume_down">Volume down</string>
+    <string name="command_call">Call</string>
+    <string name="command_walkie_talkie">Voice assistant</string>
+    <string name="command_turn_left">Left indicator</string>
+    <string name="command_turn_right">Right indicator</string>
+    <string name="command_rear_light">Rear light</string>
+    <string name="command_unknown">Unknown</string>
+
+    <!-- Button legend (static card below the status). Short and long press are told apart by the remote itself,
+         which sends a different packet for each; the texts therefore describe, they do not configure. The
+         legend_press_* labels carry their colon and are set in bold in front of the legend_*_short/_long text. -->
+    <string name="legend_title">Quick reference</string>
+    <string name="legend_key_play_pause">Play/Pause</string>
+    <string name="legend_play_pause">Start and pause playback</string>
+    <string name="legend_key_volume_up">Volume up</string>
+    <string name="legend_key_volume_down">Volume down</string>
+    <string name="legend_press_short">Short:</string>
+    <string name="legend_press_long">Long:</string>
+    <string name="legend_volume_up_short">louder</string>
+    <string name="legend_volume_up_long">next track</string>
+    <string name="legend_volume_down_short">quieter</string>
+    <string name="legend_volume_down_long">previous track</string>
+    <string name="legend_key_call">Call</string>
+    <string name="legend_call">Answer a ringing call, end a running one</string>
+    <string name="legend_key_walkie_talkie">Walkie-talkie</string>
+    <string name="legend_walkie_talkie">Start the voice assistant</string>
+    <string name="legend_key_turn_signals">Left / right indicator</string>
+    <string name="legend_turn_signals">Switch the indicator on the helmet on and off</string>
+    <string name="legend_key_rear_light">Rear light</string>
+    <string name="legend_rear_light">Steady, flashing, off</string>
+    <string name="legend_note_lights">The three light buttons only work with the helmet connected.</string>
+    <string name="legend_note_call">The call button stays without effect for WhatsApp calls.</string>
+    <!-- Call waiting: the audio mode reports one state for "a call is running", with or without a second one
+         ringing, so the button ends the running call (see action/TelecomCallExecutor.kt). -->
+    <string name="legend_note_call_waiting">If a second call comes in during a call, the call button ends the running call instead of answering the second one.</string>
+    <!-- The voice key is only sent in MODE_NORMAL (see action/MediaKeyAssistantExecutor.kt). -->
+    <string name="legend_note_walkie_talkie">The walkie-talkie button stays without effect while a call is ringing or running and while a communication app is active.</string>
 
     <!-- Actions -->
-    <string name="action_set_up">Einrichten</string>
-    <string name="action_forget">Remote vergessen</string>
-    <string name="action_request_permissions">Berechtigungen erteilen</string>
-    <string name="permissions_missing">Fehlende Berechtigungen: %1$s</string>
-    <string name="setup_failed">Einrichtung konnte nicht gestartet werden. Bitte erneut versuchen.</string>
+    <string name="action_set_up">Set up</string>
+    <string name="action_forget">Forget remote</string>
+    <string name="action_request_permissions">Grant permissions</string>
+    <string name="permissions_missing">Missing permissions: %1$s</string>
+    <string name="setup_failed">Setup could not be started. Please try again.</string>
 
     <!-- Confirmation of the chosen remote: the association dialog shows a list (several identical CRATONI
          remotes on a group ride), so the choice is confirmed by a press on that very remote. -->
-    <string name="confirmation_title">Remote bestätigen</string>
+    <string name="confirmation_title">Confirm remote</string>
     <!-- %1$s is the name of the chosen remote, e.g. "Remote control-3D2C", or remote_fallback_name. -->
-    <string name="confirmation_message">Drücke jetzt eine beliebige Taste an %1$s.</string>
+    <string name="confirmation_message">Now press any button on %1$s.</string>
     <!-- %1$d is the remaining time in whole seconds. -->
-    <string name="confirmation_remaining">Noch %1$d s</string>
-    <string name="confirmation_hint_wrong_remote">Falls das nicht deine Remote ist: einfach nichts drücken.</string>
-    <string name="action_cancel_confirmation">Abbrechen</string>
-    <string name="confirmation_failed_timeout">Es kam kein Tastendruck – die Kopplung wurde zurückgenommen. Bitte erneut einrichten.</string>
-    <string name="confirmation_cancelled">Abgebrochen – die Kopplung wurde zurückgenommen.</string>
+    <string name="confirmation_remaining">%1$d s left</string>
+    <string name="confirmation_hint_wrong_remote">If that is not your remote: simply press nothing.</string>
+    <string name="action_cancel_confirmation">Cancel</string>
+    <string name="confirmation_failed_timeout">No button press arrived – the pairing has been taken back. Please set up again.</string>
+    <string name="confirmation_cancelled">Cancelled – the pairing has been taken back.</string>
     <!-- Something on the way failed (the connection for the press could not be held, the safety net for a
          process death could not be written); the pairing is taken back. Not a cancellation by the user. -->
-    <string name="confirmation_failed_internal">Die Einrichtung konnte nicht abgeschlossen werden – die Kopplung wurde zurückgenommen. Bitte erneut versuchen.</string>
-    <string name="confirmation_failed_bluetooth_off">Bluetooth ist aus – die Kopplung wurde zurückgenommen. Bitte Bluetooth einschalten und erneut einrichten.</string>
+    <string name="confirmation_failed_internal">The setup could not be completed – the pairing has been taken back. Please try again.</string>
+    <string name="confirmation_failed_bluetooth_off">Bluetooth is off – the pairing has been taken back. Please switch Bluetooth on and set up again.</string>
     <!-- Used wherever the system offers no usable name for the chosen remote. -->
-    <string name="remote_fallback_name">der ausgewählten Fernbedienung</string>
+    <string name="remote_fallback_name">the remote you chose</string>
 
     <!-- Runtime permissions in the words of the system settings instead of their technical names -->
-    <string name="permission_bluetooth_connect">Bluetooth-Zugriff</string>
-    <string name="permission_post_notifications">Benachrichtigungen</string>
-    <string name="permission_answer_phone_calls">Anrufe annehmen</string>
+    <string name="permission_bluetooth_connect">Bluetooth access</string>
+    <string name="permission_post_notifications">Notifications</string>
+    <string name="permission_answer_phone_calls">Answer phone calls</string>
 
-    <string name="forget_confirm_title">Remote vergessen?</string>
-    <string name="forget_confirm_message">Die Kopplung mit der Fernbedienung wird entfernt. Für die weitere Nutzung ist danach eine neue Einrichtung nötig.</string>
-    <string name="forget_confirm_confirm">Entfernen</string>
-    <string name="forget_confirm_cancel">Abbrechen</string>
+    <string name="forget_confirm_title">Forget remote?</string>
+    <string name="forget_confirm_message">The pairing with the remote is removed. Using it again needs a new setup afterwards.</string>
+    <string name="forget_confirm_confirm">Remove</string>
+    <string name="forget_confirm_cancel">Cancel</string>
 
     <!-- Hints, shown only when they apply -->
-    <string name="hint_call_permission_missing">Ohne die Berechtigung „Anrufe annehmen“ bleibt die Anruf-Taste der Fernbedienung wirkungslos. Alle anderen Tasten funktionieren weiterhin.</string>
-    <string name="hint_notification_permission_missing">Ohne Benachrichtigungsberechtigung zeigt das System den Verbindungsstatus nicht in der Statusleiste an.</string>
-    <string name="hint_battery_optimization">Für eine zuverlässige Verbindung die Akkuoptimierung dieser App auf „Nie im Standby“ stellen.</string>
-    <string name="hint_location_required">Zum Einrichten muss der Standort-Schalter in den Systemeinstellungen aktiviert sein.</string>
+    <string name="hint_call_permission_missing">Without the “Answer phone calls” permission the call button on the remote stays without effect. Every other button keeps working.</string>
+    <string name="hint_notification_permission_missing">Without the notification permission the system does not show the connection state in the status bar.</string>
+    <string name="hint_battery_optimization">For a reliable connection, set the battery optimisation of this app to “Never sleeping”.</string>
+    <string name="hint_location_required">Setting up needs the location switch in the system settings to be on.</string>
     <!-- Shown before setting up: the dialog lists every CRATONI remote in range, and they look alike. -->
-    <string name="hint_choose_your_remote">Beim Einrichten listet das System alle Fernbedienungen in der Nähe auf. Welche davon deine ist, bestätigst du danach mit einem Tastendruck an ihr.</string>
+    <string name="hint_choose_your_remote">While setting up, the system lists every remote nearby. Which one of them is yours you confirm afterwards with a press on it.</string>
 </resources>
