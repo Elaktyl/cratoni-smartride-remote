@@ -113,7 +113,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 On devices with several user profiles (for example Secure Folder), add `--user 0` if necessary.
 
-Installing a downloaded APK (for example from "Releases") by tapping it: on the Pixel 7 this failed until "Install unknown apps" ("Unbekannte Apps installieren" on a German-language device) is allowed for the app you open the file with, such as the browser or a file manager. This is not a fault of the app, but the most common stumbling block when installing from GitHub. The setting is per installing app, and its location differs by vendor and Android version. Installing with `adb install` (above) does not need it; this was checked on both test devices.
+Installing a downloaded APK (for example from "Releases") by tapping it takes two steps that `adb install` does not need. First, "Install unknown apps" has to be allowed for the app the file is opened with, such as the browser or a file manager; the setting is per installing app and its location differs by vendor and Android version. Second, on the Pixel 7 the installer offered the file to Play Protect for scanning and the install only continued after that scan was confirmed. An attempt that ended in "App not installed" on the same device the day before left no trace in the system log and could not be reproduced, so the cause of that one is unknown.
 
 Notes:
 

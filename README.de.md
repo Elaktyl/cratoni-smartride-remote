@@ -113,7 +113,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Auf Geräten mit mehreren Nutzerprofilen (zum Beispiel Secure Folder) gegebenenfalls zusätzlich `--user 0` angeben.
 
-Eine heruntergeladene APK (zum Beispiel aus „Releases“) durch Antippen installieren: Das scheiterte am Pixel 7, bis „Unbekannte Apps installieren“ („Install unknown apps“ auf einem englischsprachigen Gerät) für die App erlaubt war, mit der die Datei geöffnet wird, etwa der Browser oder ein Dateimanager. Das ist kein Fehler der App, aber der häufigste Stolperstein beim Installieren von GitHub. Die Einstellung gilt je installierender App, und ihre Lage unterscheidet sich je nach Hersteller und Android-Version. Die Installation mit `adb install` (oben) braucht sie nicht; das wurde auf beiden Testgeräten geprüft.
+Eine heruntergeladene APK (zum Beispiel aus „Releases“) durch Antippen zu installieren, verlangt zwei Schritte, die `adb install` nicht braucht. Erstens muss „Unbekannte Apps installieren“ für die App erlaubt sein, mit der die Datei geöffnet wird, etwa Browser oder Dateimanager; die Einstellung gilt je installierender App, ihre Lage unterscheidet sich je nach Hersteller und Android-Version. Zweitens hat der Installer die Datei auf dem Pixel 7 von Play Protect prüfen lassen, und erst nach Bestätigung dieser Prüfung ging es weiter. Ein Versuch, der am Vortag auf demselben Gerät mit „Konnte nicht installiert werden“ endete, hat im Systemprotokoll keine Spur hinterlassen und ließ sich nicht wiederholen; die Ursache dafür ist unbekannt.
 
 Hinweise:
 
