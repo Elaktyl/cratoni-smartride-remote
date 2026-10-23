@@ -52,11 +52,11 @@ The screenshots show the German interface; on a device set to English the app sh
 To use the app:
 
 - **Android 16 (API 36) or newer is mandatory** (`minSdk = 36`). The app cannot be installed on older devices.
-- **It has been tested only on a Samsung Galaxy S25 Ultra running Android 16 (One UI 8.5).** Other devices, vendor skins and Android versions are untested.
+- **It has been tested on two devices:** a Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) and a Pixel 7 (Android 17). Other devices, vendor skins and Android versions are untested. Most measurements come from the Samsung; what was checked on the Pixel 7 is listed under "Known limitations".
 - The app contains no native code of its own (no C/C++ sources, no NDK configuration), so there is no restriction to particular CPU architectures.
 - The device needs Bluetooth Low Energy and companion device support (both declared as required in the manifest).
 - A remote control and a CRATONI SMARTRIDE 1.2 helmet.
-- When installing outside the Play Store, installing from unknown sources must be allowed for the installing app (Android settings).
+- When installing outside the Play Store, installing from unknown sources must be allowed for the installing app (Android settings, "Install unknown apps"; see "Building and installing").
 - An update must be signed with the same key as the installed version. Otherwise Android refuses the update, and the installed app has to be uninstalled first, which discards the pairing and the granted permissions.
 
 To build the app: all values are taken from `app/build.gradle.kts` and `gradle/libs.versions.toml` unless noted otherwise.
@@ -113,6 +113,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 On devices with several user profiles (for example Secure Folder), add `--user 0` if necessary.
 
+Installing a downloaded APK (for example from "Releases") by tapping it: on the Pixel 7 this failed until "Install unknown apps" ("Unbekannte Apps installieren" on a German-language device) is allowed for the app you open the file with, such as the browser or a file manager. This is not a fault of the app, but the most common stumbling block when installing from GitHub. The setting is per installing app, and its location differs by vendor and Android version. Installing with `adb install` (above) does not need it; this was checked on both test devices.
+
 Notes:
 
 - The debug build is signed with the automatically generated debug key. The release build reads its signing data from `keystore.properties` in the project root (template: `keystore.properties.example`). If the file is missing or incomplete, the build still runs but the release artifact is left unsigned; it deliberately does not fall back to the debug key. Key files (`*.jks`, `*.keystore`) and `keystore.properties` are excluded in `.gitignore` and are not in the repository. Without the key and its passwords, a published version can no longer be updated.
@@ -151,7 +153,7 @@ Purpose: go through a built or downloaded version on your own device before rely
 
 Prerequisites:
 
-- Target platform: Android 16 (API 36) or newer; tested only on a Samsung Galaxy S25 Ultra with One UI 8.5.
+- Target platform: Android 16 (API 36) or newer; tested on a Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) and a Pixel 7 (Android 17). The items below come mainly from the Samsung tests; on the Pixel 7 the installation, the setup from the list, the helmet connection, the remote's buttons and the voice assistant were checked (see "Known limitations").
 - A remote control and a helmet that is paired in the Android Bluetooth settings; the manufacturer's app is closed (the remote accepts only one connection).
 - A media app with playback running, and a way to receive a phone call.
 - The permissions from the Setup section are granted, as far as an item needs them.
@@ -224,14 +226,15 @@ A short overview. Protocols, measurements and design decisions are in [`docs/arc
 - **Several remotes:** Selecting from a list and confirming with a button press has never been tested with a real second remote.
 - **Strict name pattern:** The remote is found only if its advertised name is exactly `Remote control-` followed by four hexadecimal digits (pattern `^Remote control-[0-9A-Fa-f]{4}$`). If another device or firmware variant uses a different name, it does not appear in the list.
 - **No feedback from the helmet:** The helmet does not acknowledge light commands. The light states shown are what the app assumes, not a measurement. After a newly established connection the app assumes "everything off" without sending commands; if the helmet keeps blinking after an interruption, the display can be wrong.
-- **Voice assistant:** It is started through an unofficially documented key sequence (long press of the headset button). An Android or One UI update can make it stop working. The first time, Android asks which app to open. The button is blocked while a call rings, a call is in progress, or a communication app (audio mode communication) is active.
+- **Voice assistant:** It is started through an unofficially documented key sequence (long press of the headset button). An Android or One UI update can make it stop working. The first time, Android may ask which app to open (see the next item). The button is blocked while a call rings, a call is in progress, or a communication app (audio mode communication) is active.
+- **Which action Android takes depends on the device (measured):** On the Samsung Galaxy S25 Ultra (One UI 8.5), Android takes the hands-free voice search in both situations. On the Pixel 7 (Android 17), it does so only with the screen off or the device locked, which is the case while riding; the assistant starts directly then. With the device unlocked and the screen on, Android takes the plain web search action instead and, as long as no default app is set for it, shows its app chooser. The row "Zuständiger Assistent" (Assistant in charge) evaluates only the hands-free action. On a device that behaves like the Pixel 7, it therefore describes the riding case, not every case. This holds only until you have chosen a default app once in the chooser; after that, both actions resolve to that app (on the Pixel 7: Google) and the row is correct in both situations again. The app deliberately has no second row for this, because it would have been misleading on One UI from the start.
 - **Volume:** Affects local playback only, not remote targets such as Spotify Connect or Cast.
 - **Battery display:** It is not established whether the reported value means exactly percent or is a device-specific level indicator; the app shows it unchanged. The value is reported in steps of ten.
 - **The helmet's battery level** is not shown.
 - **Time format:** Times and dates follow the app language, not the 12/24-hour switch in the system settings. For example, an English interface shows `12:34:56 PM` (American English) and a German one `12:34:56`, whatever the switch says. Honouring the switch would need an Android `Context` in the formatting code.
 - **Language and legend not checked on a device:** Switching the language per app, the notification in English (including its rebuild when the language changes) and the button legend with a large system font have been built and unit-tested, but not yet tried on a device.
 - **Error details:** Connection errors appear in plain words on the screen and in the notification. The Bluetooth (GATT) status codes are no longer part of the notification; they are only in the log.
-- **Only one test device:** All statements about behavior are based on one Samsung Galaxy S25 Ultra running Android 16 with one remote and one helmet.
+- **Only two test devices, one remote, one helmet:** All statements about behavior are based on a Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) and a Pixel 7 (Android 17), with the same remote and helmet. Most measurements (phone calls, battery warning, reconnecting, restart) come from the Samsung. On the Pixel 7 the following was checked: installing with `adb install`, the setup from the device list with confirmation by button press, the helmet connection, the buttons of the remote and the start of the voice assistant.
 - The complete list of open issues is in `docs/architektur.md`.
 
 ## License

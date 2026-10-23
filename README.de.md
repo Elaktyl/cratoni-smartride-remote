@@ -52,11 +52,11 @@ Die Screenshots zeigen die deutsche Oberfläche; auf einem Gerät mit englischer
 Zur Nutzung:
 
 - **Android 16 (API 36) oder neuer ist zwingend** (`minSdk = 36`). Auf älteren Geräten lässt sich die App nicht installieren.
-- **Getestet wurde ausschließlich auf einem Samsung Galaxy S25 Ultra mit Android 16 (One UI 8.5).** Andere Geräte, Hersteller-Oberflächen und Android-Versionen sind ungeprüft.
+- **Getestet wurde auf zwei Geräten:** einem Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) und einem Pixel 7 (Android 17). Andere Geräte, Hersteller-Oberflächen und Android-Versionen sind ungeprüft. Die meisten Messungen stammen vom Samsung; was am Pixel 7 geprüft wurde, steht unter „Bekannte Grenzen“.
 - Die App enthält keinen eigenen nativen Code (keine C/C++-Quellen, keine NDK-Konfiguration). Eine Einschränkung auf bestimmte Prozessorarchitekturen besteht daher nicht.
 - Das Gerät braucht Bluetooth Low Energy und die Companion-Device-Unterstützung (beides im Manifest als erforderlich deklariert).
 - Eine Fernbedienung und ein Helm CRATONI SMARTRIDE 1.2.
-- Bei Installation außerhalb des Play Store muss die Installation aus unbekannten Quellen für die installierende App erlaubt sein (Android-Einstellungen).
+- Bei Installation außerhalb des Play Store muss die Installation aus unbekannten Quellen für die installierende App erlaubt sein (Android-Einstellungen, „Unbekannte Apps installieren“; siehe „Bauen und installieren“).
 - Ein Update muss mit derselben Signatur erstellt sein wie die installierte Fassung. Andernfalls verweigert Android die Aktualisierung; die installierte App muss dann zuerst deinstalliert werden, wodurch Kopplung und Berechtigungen verloren gehen.
 
 Zum Bauen: Alle Angaben aus `app/build.gradle.kts` und `gradle/libs.versions.toml`, soweit nicht anders vermerkt.
@@ -113,6 +113,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Auf Geräten mit mehreren Nutzerprofilen (zum Beispiel Secure Folder) gegebenenfalls zusätzlich `--user 0` angeben.
 
+Eine heruntergeladene APK (zum Beispiel aus „Releases“) durch Antippen installieren: Das scheiterte am Pixel 7, bis „Unbekannte Apps installieren“ („Install unknown apps“ auf einem englischsprachigen Gerät) für die App erlaubt war, mit der die Datei geöffnet wird, etwa der Browser oder ein Dateimanager. Das ist kein Fehler der App, aber der häufigste Stolperstein beim Installieren von GitHub. Die Einstellung gilt je installierender App, und ihre Lage unterscheidet sich je nach Hersteller und Android-Version. Die Installation mit `adb install` (oben) braucht sie nicht; das wurde auf beiden Testgeräten geprüft.
+
 Hinweise:
 
 - Der Debug-Build ist mit dem automatisch erzeugten Debug-Schlüssel signiert. Der Release-Build liest die Signaturdaten aus der Datei `keystore.properties` im Projektstammverzeichnis (Vorlage: `keystore.properties.example`). Fehlt die Datei oder ist sie unvollständig, läuft der Build trotzdem, das Release-Artefakt bleibt aber unsigniert; auf den Debug-Schlüssel fällt er bewusst nicht zurück. Schlüsseldateien (`*.jks`, `*.keystore`) und `keystore.properties` sind in `.gitignore` ausgeschlossen und liegen nicht im Repository. Ohne den Schlüssel und seine Passwörter lässt sich eine veröffentlichte Fassung nicht mehr aktualisieren.
@@ -151,7 +153,7 @@ Zweck: Eine gebaute oder heruntergeladene Fassung vor dem Einsatz auf dem eigene
 
 Voraussetzungen:
 
-- Zielplattform: Android 16 (API 36) oder neuer; getestet wurde nur auf einem Samsung Galaxy S25 Ultra mit One UI 8.5.
+- Zielplattform: Android 16 (API 36) oder neuer; getestet wurde auf einem Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) und einem Pixel 7 (Android 17). Die Punkte unten stammen überwiegend aus den Tests am Samsung; am Pixel 7 wurden die Installation, die Einrichtung aus der Liste, die Helmverbindung, die Tasten der Fernbedienung und der Start des Sprachassistenten geprüft (siehe „Bekannte Grenzen“).
 - Eine Fernbedienung und ein Helm, der in den Android-Bluetooth-Einstellungen gekoppelt ist; die Hersteller-App ist beendet (die Fernbedienung nimmt nur eine Verbindung an).
 - Eine Medien-App mit laufender Wiedergabe und die Möglichkeit, einen Anruf zu empfangen.
 - Die Berechtigungen aus dem Abschnitt Einrichtung sind erteilt, soweit der jeweilige Punkt sie braucht.
@@ -224,14 +226,15 @@ Kurzüberblick; Protokolle, Messungen und Entscheidungen stehen in [`docs/archit
 - **Mehrere Fernbedienungen:** Die Auswahl aus einer Liste mit Bestätigung per Tastendruck wurde nie mit einer echten zweiten Fernbedienung geprüft.
 - **Strenges Namensmuster:** Die Fernbedienung wird nur gefunden, wenn ihr beworbener Name exakt `Remote control-` plus vier Hexadezimalziffern lautet (Muster `^Remote control-[0-9A-Fa-f]{4}$`). Weicht der Name einer anderen Geräte- oder Firmware-Variante ab, erscheint sie nicht in der Liste.
 - **Keine Rückmeldung vom Helm:** Der Helm bestätigt keine Lichtbefehle. Die angezeigten Lichtzustände sind das, was die App annimmt, keine Messung. Bei einer neu aufgebauten Verbindung geht die App von „alles aus“ aus, ohne Befehle zu senden; blinkt der Helm nach einem Abbruch weiter, kann die Anzeige abweichen.
-- **Sprachassistent:** Der Start läuft über eine nicht offiziell dokumentierte Tastenfolge (lange Headset-Taste). Ein Update von Android oder One UI kann ihn wirkungslos machen. Beim ersten Mal fragt Android, welche App geöffnet werden soll. Die Taste ist gesperrt, solange es klingelt, ein Telefonat läuft oder eine Kommunikations-App (Audio-Modus Kommunikation) aktiv ist.
+- **Sprachassistent:** Der Start läuft über eine nicht offiziell dokumentierte Tastenfolge (lange Headset-Taste). Ein Update von Android oder One UI kann ihn wirkungslos machen. Beim ersten Mal fragt Android unter Umständen, welche App geöffnet werden soll (siehe nächster Punkt). Die Taste ist gesperrt, solange es klingelt, ein Telefonat läuft oder eine Kommunikations-App (Audio-Modus Kommunikation) aktiv ist.
+- **Welche Aktion Android nimmt, hängt vom Gerät ab (gemessen):** Auf dem Samsung Galaxy S25 Ultra (One UI 8.5) nimmt Android in beiden Lagen die Freisprech-Sprachsuche. Auf dem Pixel 7 (Android 17) tut es das nur bei ausgeschaltetem Bildschirm oder gesperrtem Gerät, also im Fahrbetrieb; der Assistent startet dann direkt. Bei entsperrtem Gerät mit eingeschaltetem Bildschirm nimmt Android stattdessen die einfache Websuche-Aktion und zeigt, solange dafür keine Standard-App gesetzt ist, seine App-Auswahl. Die Zeile „Zuständiger Assistent“ wertet nur die Freisprech-Aktion aus. Auf einem Gerät, das sich wie das Pixel 7 verhält, beschreibt sie deshalb den Fahrbetrieb und nicht jeden Fall. Das gilt nur, bis in der Auswahl einmal eine Standard-App gewählt wurde; danach lösen beide Aktionen auf diese App auf (am Pixel 7: Google), und die Zeile stimmt wieder in beiden Lagen. Eine zweite Zeile dafür gibt es bewusst nicht, weil sie auf One UI von Anfang an irreführend gewesen wäre.
 - **Lautstärke:** Wirkt nur auf die lokale Wiedergabe, nicht auf entfernte Ziele wie Spotify Connect oder Cast.
 - **Akkuanzeige:** Es ist nicht belegt, ob der gemeldete Wert exakt Prozent bedeutet oder eine geräteeigene Stufenanzeige ist; die App zeigt ihn unverändert an. Gemeldet wird in Zehnerstufen.
 - **Akkustand des Helms** wird nicht angezeigt.
 - **Zeitformat:** Uhrzeit und Datum folgen der Sprache der App, nicht dem 12/24-Stunden-Schalter in den Systemeinstellungen. Beispiel: Eine englische Oberfläche zeigt `12:34:56 PM` (amerikanisches Englisch), eine deutsche `12:34:56`, unabhängig vom Schalter. Den Schalter zu beachten, bräuchte einen Android-`Context` im Formatierungscode.
 - **Sprache und Legende nicht am Gerät geprüft:** Umschalten der Sprache pro App, die Benachrichtigung auf Englisch (samt Neuaufbau beim Sprachwechsel) und die Tastenlegende bei großer Systemschrift sind gebaut und per Unit-Test geprüft, aber noch nicht am Gerät ausprobiert.
 - **Fehlerdetails:** Verbindungsfehler erscheinen in Klartext auf dem Bildschirm und in der Benachrichtigung. Die Bluetooth-Statuscodes (GATT) gehören nicht mehr zur Benachrichtigung; sie stehen nur noch im Log.
-- **Nur ein Testgerät:** Alle Aussagen zum Verhalten beruhen auf einem Samsung Galaxy S25 Ultra mit Android 16 und einer Fernbedienung samt Helm.
+- **Nur zwei Testgeräte, eine Fernbedienung, ein Helm:** Alle Aussagen zum Verhalten beruhen auf einem Samsung Galaxy S25 Ultra (Android 16, One UI 8.5) und einem Pixel 7 (Android 17), mit derselben Fernbedienung und demselben Helm. Die meisten Messungen (Telefonate, Akkuwarnung, Wiederverbinden, Neustart) stammen vom Samsung. Am Pixel 7 wurde Folgendes geprüft: Installation mit `adb install`, Einrichtung aus der Geräteliste mit Bestätigung per Tastendruck, Helmverbindung, die Tasten der Fernbedienung und der Start des Sprachassistenten.
 - Die vollständige Liste offener Punkte steht in `docs/architektur.md`.
 
 ## Lizenz
